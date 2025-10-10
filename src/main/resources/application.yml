@@ -1,1 +1,69 @@
+spring:
+  application:
+    name: tree-chat
 
+  # 数据源配置
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://localhost:5432/tree_chat?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&stringtype=unspecified
+    username: postgres
+    password: ${DB_PASSWORD:postgres}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      connection-timeout: 30000
+
+  # JPA配置（虽然使用MyBatis-Plus，但需要禁用）
+  jpa:
+    hibernate:
+      ddl-auto: none
+
+# MyBatis-Plus配置
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: assign_uuid
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+  mapper-locations: classpath*:/mapper/**/*.xml
+
+# JWT配置
+jwt:
+  secret: ${JWT_SECRET:your-256-bit-secret-key-change-in-production-please-make-it-long-enough}
+  expiration: 86400000  # 24小时（毫秒）
+
+# LangChain4j配置
+langchain4j:
+  open-ai:
+    api-key: ${OPENAI_API_KEY:your-openai-api-key}
+    model-name: gpt-4
+    temperature: 0.7
+    max-tokens: 2000
+    timeout: 60s
+
+# 服务器配置
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+
+# 日志配置
+#logging:
+#  level:
+#    root: INFO
+#    com.example.treechat: DEBUG
+#    com.baomidou.mybatisplus: DEBUG
+#  pattern:
+#    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"
+
+# Swagger/OpenAPI配置
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true

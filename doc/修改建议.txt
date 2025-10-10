@@ -1,0 +1,105 @@
+后端开发计划
+
+     第一阶段：基础架构搭建（优先级：高）
+
+     1. 更新 pom.xml 依赖
+
+     - 添加 Spring Web（REST API支持）
+     - 添加 Spring Security + JWT
+     - 添加 MyBatis-Plus 3.5.x
+     - 添加 PostgreSQL驱动
+     - 添加 LangChain4j 0.22.x
+     - 添加 Lombok、Validation等工具库
+
+     2. 配置 application.yml
+
+     - 数据库连接配置（PostgreSQL）
+     - MyBatis-Plus配置
+     - JWT安全配置
+     - 日志配置
+
+     3. 数据库设计实现
+
+     - 创建数据库初始化SQL脚本（schema.sql）
+     - 11张核心表：projects, nodes, messages, node_references, project_ui_metadata, node_ui_metadata, user_settings, user_credits, credit_transactions, insight_tasks, users
+     - 创建索引（全文检索、外键、性能优化）
+
+     4. 项目包结构搭建
+
+     com.example.treechat/
+     ├── config/          (安全、MyBatis等配置)
+     ├── entity/          (实体类)
+     ├── mapper/          (MyBatis Mapper)
+     ├── dto/             (请求/响应对象)
+     ├── controller/      (REST Controllers)
+     ├── service/         (业务逻辑)
+     ├── security/        (认证授权)
+     └── exception/       (异常处理)
+
+     第二阶段：核心功能开发（优先级：高）
+
+     5. 安全模块
+
+     - User实体 + UserMapper
+     - JWT工具类（生成/验证token）
+     - Spring Security配置
+     - 基于资源所有权的授权拦截器
+
+     6. 项目管理API
+
+     - Project相关CRUD
+     - 层级节点树查询
+     - UI状态保存
+
+     7. 节点管理API（核心）
+
+     - 节点CRUD
+     - 批量位置更新（/nodes/positions）
+     - 结构变更（移动、排序）+ 循环引用校验
+     - 递归CTE上下文查询（带深度限制）
+
+     8. 对话与结论API
+
+     - 消息存储
+     - AI对话集成（LangChain4j）
+     - 流式响应支持
+     - 结论终审逻辑
+
+     第三阶段：高级功能（优先级：中）
+
+     9. 搜索与引用
+
+     - PostgreSQL全文检索实现
+     - 节点搜索API
+     - 引用关系同步
+     - 反向链接查询
+
+     10. 全局洞察（异步任务）
+
+     - 异步任务框架（@Async或消息队列）
+     - 苏格拉底式AI教练
+     - 点数系统集成
+
+     11. 用户设置与追踪
+
+     - 用户设置CRUD
+     - 行为事件追踪
+     - 自适应引导逻辑
+
+     第四阶段：测试与优化（优先级：中）
+
+     12. 单元测试与集成测试
+
+     13. 性能优化（批量查询、缓存）
+
+     14. API文档生成（SpringDoc OpenAPI）
+
+     ---
+     预计开发时间： 按文档规划3-4周（第一阶段）+ 4周（第二阶段）+ 2-3周（第三、四阶段）
+
+     建议开发顺序：
+     1→2→3→4（搭建框架）→ 5（安全）→ 6→7（核心功能）→ 8（AI集成）→ 9→10→11（高级功能）→ 12→13→14（完善）
+
+netstat -ano | findstr ":8080"
+
+taskkill /F /PID 36968
