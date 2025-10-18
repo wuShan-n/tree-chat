@@ -7,7 +7,10 @@
       "Bash(mvn:*)",
       "Bash(netstat:*)",
       "Bash(findstr:*)",
-      "Bash(taskkill:*)"
+      "Bash(taskkill:*)",
+      "WebSearch",
+      "WebFetch(domain:docs.langchain4j.dev)",
+      "WebFetch(domain:github.com)"
     ],
     "deny": [],
     "ask": []

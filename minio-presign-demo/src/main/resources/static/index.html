@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="">
+<body>
+<input type="file" id="file" />
+<button id="btn">Upload</button>
+<script>
+	document.getElementById('btn').onclick = async () => {
+		const f = document.getElementById('file').files[0];
+		if (!f) return;
+		
+		// 1) 向后端申请预签名
+		const presign = await fetch('http://localhost:8080/uploads/presign', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ filename: f.name, contentType: f.type || 'application/octet-stream', size: f.size })
+		}).then(r => r.json());
+		
+		// 2) 直传 MinIO（务必带上签名时使用的 Content-Type）
+		await fetch(presign.uploadUrl, {
+			method: 'PUT',
+			headers: presign.requiredHeaders, // 通常只需 Content-Type
+			body: f
+		});
+		
+		// 3) 通知后端处理
+		await fetch(`http://localhost:8080/uploads/${presign.id}/complete`, { method: 'POST' });
+		alert('Uploaded! id=' + presign.id);
+	};
+</script>
+</body>
+</html>

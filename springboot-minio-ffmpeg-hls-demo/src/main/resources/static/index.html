@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"/>
+  <title>Spring Boot + MinIO + FFmpeg HLS + CDN URL Demo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 24px; }
+    .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; max-width: 800px; }
+    .row { margin: 12px 0; }
+    input[type=file] { padding: 8px; }
+    button { padding: 8px 16px; border-radius: 8px; border: 1px solid #444; }
+    code { background: #f6f6f6; padding: 2px 6px; border-radius: 4px; }
+    #log { white-space: pre-wrap; background: #fafafa; border: 1px dashed #ccc; padding: 8px; height: 120px; overflow: auto; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>直传 → 转码 → 上传 HLS 到 MinIO/S3 → 返回 CDN 播放地址</h2>
+    <div class="row">
+      <input id="file" type="file" accept="video/*"/>
+      <button id="uploadBtn">上传并转码</button>
+    </div>
+    <div class="row"><strong>播放地址：</strong><span id="playUrl"></span></div>
+    <div class="row"><video id="video" controls style="width:100%; max-width:780px;" preload="metadata"></video></div>
+    <div class="row"><div id="log"></div></div>
+    <p>提示：MinIO 需为目标桶设置 CORS 允许 <code>http://localhost:8080</code> 的 PUT/GET。</p>
+  </div>
+
+  <script src="https://unpkg.com/hls.js@latest"></script>
+  <script>
+    const log = (msg) => { const el = document.getElementById('log'); el.textContent += msg + "\n"; el.scrollTop = el.scrollHeight; };
+
+    async function presign(objectName, contentType) {
+      const resp = await fetch('/api/upload/presign', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({objectName, contentType})
+      });
+      if (!resp.ok) throw new Error('presign failed');
+      return resp.json();
+    }
+
+    async function putToMinio(url, file) {
+      const r = await fetch(url, { method: 'PUT', headers: {'Content-Type': file.type}, body: file });
+      if (!r.ok) throw new Error('PUT to MinIO failed: ' + r.status);
+    }
+
+    async function ingest(objectName) {
+      const resp = await fetch('/api/ingest', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({objectName})
+      });
+      if (!resp.ok) throw new Error('ingest failed');
+      return resp.json();
+    }
+
+    function playM3u8(url) {
+      const video = document.getElementById('video');
+      if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = url;
+      } else if (Hls.isSupported()) {
+        const hls = new Hls();
+        hls.loadSource(url);
+        hls.attachMedia(video);
+      } else {
+        alert('Your browser cannot play HLS');
+      }
+    }
+
+    document.getElementById('uploadBtn').addEventListener('click', async () => {
+      const f = document.getElementById('file').files[0];
+      if (!f) { alert('请选择视频文件'); return; }
+      const objectName = f.name;
+      try {
+        log('1) 请求预签名 URL...');
+        const {url} = await presign(objectName, f.type || 'video/mp4');
+        log('2) 直传至 MinIO: ' + url.split('?')[0]);
+        await putToMinio(url, f);
+        log('3) 通知后端开始转码并上传 HLS...');
+        const { playUrl } = await ingest(objectName);
+        log('完成，CDN 播放地址: ' + playUrl);
+        document.getElementById('playUrl').textContent = playUrl;
+        playM3u8(playUrl);
+      } catch (e) {
+        console.error(e);
+        log('出错：' + e.message);
+      }
+    });
+  </script>
+</body>
+</html>

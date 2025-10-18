@@ -1,0 +1,20 @@
+server:
+  port: 8080
+
+app:
+  minio:
+    endpoint: http://localhost:9000
+    accessKey: minioadmin
+    secretKey: minioadmin
+    bucket: videos
+  cdn:
+    # 生产环境改成你的 CDN 域名，如 https://cdn.example.com/vod/
+    publicBase: http://localhost:9000/videos/vod/
+  output:
+    # HLS 上传到桶内的前缀 (vod/assetName/...)
+    prefix: vod/
+
+spring:
+  web:
+    resources:
+      static-locations: classpath:/static/
