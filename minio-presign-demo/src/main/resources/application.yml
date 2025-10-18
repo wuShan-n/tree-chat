@@ -1,0 +1,28 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/minio_demo?useSSL=false&serverTimezone=UTC
+    username: root
+    password: root
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  sql:
+    init:
+      mode: never
+  h2:
+    console:
+      enabled: true
+
+mybatis:
+  configuration:
+    map-underscore-to-camel-case: true
+
+app:
+  bucket: minio-demo
+  s3:
+    endpoint: http://127.0.0.1:9000
+    region: us-east-1
+    access-key: minioadmin
+    secret-key: minioadmin
+    path-style: true  # MinIO 推荐开启
