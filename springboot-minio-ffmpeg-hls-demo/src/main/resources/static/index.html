@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Video Service Test Page</title>
+	<style>
+		body { font-family: sans-serif; margin: 20px; background: #f4f4f4; }
+		.container { max-width: 800px; margin: auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+		h2 { border-bottom: 2px solid #eee; padding-bottom: 5px; }
+		input[type="text"], input[type="file"] { width: 98%; padding: 8px; margin-bottom: 10px; }
+		button { padding: 10px 15px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+		button:hover { background: #0056b3; }
+		pre { background: #222; color: #00ff00; padding: 15px; border-radius: 5px; overflow-x: auto; max-height: 400px; }
+		video { max-width: 100%; border: 1px solid #ccc; margin-top: 10px; }
+		.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+		.section { margin-bottom: 20px; }
+	</style>
+</head>
+<body>
+<div class="container">
+	<h1>Video Service Test Interface</h1>
+	
+	<div class="grid">
+		<div class="section">
+			<h2>Step 1: Upload & Ingest</h2>
+			<input type="file" id="fileInput" accept="video/*">
+			<button id="uploadButton">1. Upload and Ingest Video</button>
+		</div>
+		
+		<div class="section">
+			<h2>Step 2: Check Ingest Status</h2>
+			<input type="text" id="videoIdInput" placeholder="Video ID (auto-filled from Step 1)">
+			<button id="statusButton">2. Check Status Manually</button>
+		</div>
+	</div>
+	
+	<div class="section">
+		<h2>Utility: Get Presigned Download URL</h2>
+		<input type="text" id="objectNameInput" placeholder="Enter objectName (e.g., my-video.mp4)">
+		<button id="getDownloadUrlButton">Get Download URL</button>
+	</div>
+	
+	<div class="section">
+		<h2>Playback</h2>
+		<video id="videoPlayer" controls muted playsinline>
+			<source id="videoSource" src="" type="application/vnd.apple.mpegurl">
+		</video>
+	</div>
+	
+	<h2>Logs</h2>
+	<pre id="logOutput"></pre>
+</div>
+
+<script>
+	// 从 application.yml 获取
+	const API_BASE_URL = 'http://localhost:8080';
+	// S3 存储桶名称
+	const BUCKET_NAME = 'videos';
+	
+	// DOM Elements
+	const fileInput = document.getElementById('fileInput');
+	const uploadButton = document.getElementById('uploadButton');
+	const videoIdInput = document.getElementById('videoIdInput');
+	const statusButton = document.getElementById('statusButton');
+	const objectNameInput = document.getElementById('objectNameInput');
+	const getDownloadUrlButton = document.getElementById('getDownloadUrlButton');
+	const logOutput = document.getElementById('logOutput');
+	const videoPlayer = document.getElementById('videoPlayer');
+	const videoSource = document.getElementById('videoSource');
+	
+	// --- Logger ---
+	function log(message) {
+		console.log(message);
+		logOutput.textContent = `[${new Date().toLocaleTimeString()}] ${message}\n` + logOutput.textContent;
+	}
+	
+	function logJson(data) {
+		const prettyJson = JSON.stringify(data, null, 2);
+		log(prettyJson);
+	}
+	
+	// --- Step 1: Upload and Ingest Workflow ---
+	uploadButton.addEventListener('click', async () => {
+		const file = fileInput.files[0];
+		if (!file) {
+			log('ERROR: Please select a file first.');
+			return;
+		}
+		
+		log(`Selected file: ${file.name} (${file.type})`);
+		
+		// 使用唯一名称，避免 S3 冲突
+		const objectName = `uploads/${Date.now()}-${file.name}`;
+		log(`Using objectName: ${objectName}`);
+		
+		try {
+			// 1. Get Presigned URL from our backend
+			log('1/4: Requesting presigned URL...');
+			const presignReq = {
+				objectName: objectName,
+				contentType: file.type
+			};
+			
+			const presignRes = await fetch(`${API_BASE_URL}/api/upload/presign`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(presignReq)
+			});
+			
+			if (!presignRes.ok) throw new Error(`Failed to get presigned URL: ${presignRes.statusText}`);
+			const presignData = await presignRes.json();
+			logJson(presignData);
+			
+			// 2. Upload file to S3 (MinIO)
+			log('2/4: Uploading file to S3...');
+			const s3UploadRes = await fetch(presignData.url, {
+				method: 'PUT', // The service returns 'PUT'
+				headers: { 'Content-Type': file.type },
+				body: file
+			});
+			
+			if (!s3UploadRes.ok) throw new Error(`S3 upload failed: ${s3UploadRes.statusText}`);
+			log('S3 upload successful.');
+			
+			// 3. Complete Ingest
+			log('3/4: Notifying backend to start ingest...');
+			const ingestReq = { objectName: presignData.objectName };
+			const ingestRes = await fetch(`${API_BASE_URL}/api/ingest`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(ingestReq)
+			});
+			
+			if (!ingestRes.ok) throw new Error(`Ingest failed: ${ingestRes.statusText}`);
+			const ingestData = await ingestRes.json();
+			log('Ingest complete!');
+			logJson(ingestData);
+			
+			videoIdInput.value = ingestData.videoId;
+			
+			// 4. Start polling
+			log('4/4: Starting status polling...');
+			checkStatus(ingestData.videoId);
+			
+		} catch (error) {
+			log(`ERROR: ${error.message}`);
+			console.error(error);
+		}
+	});
+	
+	// --- Step 2: Status Checking ---
+	statusButton.addEventListener('click', () => {
+		const videoId = videoIdInput.value;
+		if (!videoId) {
+			log('ERROR: No Video ID provided.');
+			return;
+		}
+		checkStatus(videoId);
+	});
+	
+	async function checkStatus(videoId) {
+		if (!videoId) return;
+		
+		log(`Checking status for video ${videoId}...`);
+		try {
+			const res = await fetch(`${API_BASE_URL}/api/ingest/${videoId}`);
+			if (!res.ok) throw new Error(`Status check failed: ${res.statusText}`);
+			
+			const data = await res.json();
+			logJson(data);
+			
+			if (data.jobStatus === 'SUCCESS' || data.assetStatus === 'READY') {
+				log('SUCCESS: Transcoding complete. Playback URL is ready.');
+				videoSource.src = data.playbackUrl;
+				videoPlayer.load();
+		
+			} else if (data.jobStatus === 'FAILED' || data.assetStatus === 'FAILED') {
+				log('FAILED: Transcoding failed.');
+			} else {
+				log(`Status is ${data.jobStatus}. Polling again in 5 seconds...`);
+				setTimeout(() => checkStatus(videoId), 5000);
+			}
+		} catch (error) {
+			log(`ERROR: ${error.message}`);
+		}
+	}
+	
+	// --- Utility: Get Download URL ---
+	getDownloadUrlButton.addEventListener('click', async () => {
+		const objectName = objectNameInput.value;
+		if (!objectName) {
+			log('ERROR: Please enter an objectName.');
+			return;
+		}
+		
+		log(`Requesting download URL for: ${objectName}`);
+		try {
+			const res = await fetch(`${API_BASE_URL}/api/upload/presign-get?objectName=${encodeURIComponent(objectName)}`);
+			if (!res.ok) throw new Error(`Failed to get download URL: ${res.statusText}`);
+			
+			const data = await res.json();
+			logJson(data);
+			log(`Download URL (valid for 10 min): ${data.url}`);
+		} catch (error) {
+			log(`ERROR: ${error.message}`);
+		}
+	});
+
+</script>
+</body>
+</html>
