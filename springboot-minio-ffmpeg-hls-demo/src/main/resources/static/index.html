@@ -1,91 +1,241 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-  <meta charset="utf-8"/>
-  <title>Spring Boot + MinIO + FFmpeg HLS + CDN URL Demo</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 24px; }
-    .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; max-width: 800px; }
-    .row { margin: 12px 0; }
-    input[type=file] { padding: 8px; }
-    button { padding: 8px 16px; border-radius: 8px; border: 1px solid #444; }
-    code { background: #f6f6f6; padding: 2px 6px; border-radius: 4px; }
-    #log { white-space: pre-wrap; background: #fafafa; border: 1px dashed #ccc; padding: 8px; height: 120px; overflow: auto; }
-  </style>
+	<meta charset="utf-8"/>
+	<title>Spring Boot + MinIO + FFmpeg HLS + CDN URL Demo</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1"/>
+	<style>
+		body {
+			font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+			margin: 24px;
+		}
+		
+		.card {
+			border: 1px solid #ddd;
+			border-radius: 12px;
+			padding: 16px;
+			max-width: 800px;
+		}
+		
+		.row {
+			margin: 12px 0;
+		}
+		
+		input[type=file] {
+			padding: 8px;
+		}
+		
+		button {
+			padding: 8px 16px;
+			border-radius: 8px;
+			border: 1px solid #444;
+		}
+		
+		code {
+			background: #f6f6f6;
+			padding: 2px 6px;
+			border-radius: 4px;
+		}
+		
+		#log {
+			white-space: pre-wrap;
+			background: #fafafa;
+			border: 1px dashed #ccc;
+			padding: 8px;
+			height: 120px;
+			overflow: auto;
+		}
+	</style>
 </head>
 <body>
-  <div class="card">
-    <h2>直传 → 转码 → 上传 HLS 到 MinIO/S3 → 返回 CDN 播放地址</h2>
-    <div class="row">
-      <input id="file" type="file" accept="video/*"/>
-      <button id="uploadBtn">上传并转码</button>
-    </div>
-    <div class="row"><strong>播放地址：</strong><span id="playUrl"></span></div>
-    <div class="row"><video id="video" controls style="width:100%; max-width:780px;" preload="metadata"></video></div>
-    <div class="row"><div id="log"></div></div>
-    <p>提示：MinIO 需为目标桶设置 CORS 允许 <code>http://localhost:8080</code> 的 PUT/GET。</p>
-  </div>
+<div class="card">
+	<h2>按名称播放已有视频</h2>
+	<div class="row">
+		<input id="videoNameInput" type="text" placeholder="输入视频名称 (例如: my-video.mp4)" style="width: 250px; padding: 8px;"/>
+		<button id="playBtn">播放</button>
+	</div>
+	<p>提示：这会调用 <code>/api/ingest</code> 来获取已处理视频的播放地址。</p>
+	
+	<h2>直传 → 转码 → 上传 HLS 到 MinIO/S3 → 返回 CDN 播放地址</h2>
+	<div class="row">
+		<input id="file" type="file" accept="video/*"/>
+		<button id="uploadBtn">上传并转码</button>
+	</div>
+	<div class="row"><strong>播放地址：</strong><span id="playUrl"></span></div>
+	
+	<div class="row" id="qualityControl" style="display: none;">
+		<strong>清晰度：</strong>
+		<select id="qualitySelect"></select>
+	</div>
+	
+	<div class="row">
+		<video id="video" controls style="width:100%; max-width:780px;" preload="metadata"></video>
+	</div>
 
-  <script src="https://unpkg.com/hls.js@latest"></script>
-  <script>
-    const log = (msg) => { const el = document.getElementById('log'); el.textContent += msg + "\n"; el.scrollTop = el.scrollHeight; };
+	<div class="row">
+		<div id="log"></div>
+	</div>
+	<p>提示：MinIO 需为目标桶设置 CORS 允许 <code>http://localhost:8080</code> 的 PUT/GET。</p>
+</div>
 
-    async function presign(objectName, contentType) {
-      const resp = await fetch('/api/upload/presign', {
-        method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({objectName, contentType})
-      });
-      if (!resp.ok) throw new Error('presign failed');
-      return resp.json();
-    }
-
-    async function putToMinio(url, file) {
-      const r = await fetch(url, { method: 'PUT', headers: {'Content-Type': file.type}, body: file });
-      if (!r.ok) throw new Error('PUT to MinIO failed: ' + r.status);
-    }
-
-    async function ingest(objectName) {
-      const resp = await fetch('/api/ingest', {
-        method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({objectName})
-      });
-      if (!resp.ok) throw new Error('ingest failed');
-      return resp.json();
-    }
-
-    function playM3u8(url) {
-      const video = document.getElementById('video');
-      if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        video.src = url;
-      } else if (Hls.isSupported()) {
-        const hls = new Hls();
-        hls.loadSource(url);
-        hls.attachMedia(video);
-      } else {
-        alert('Your browser cannot play HLS');
-      }
-    }
-
-    document.getElementById('uploadBtn').addEventListener('click', async () => {
-      const f = document.getElementById('file').files[0];
-      if (!f) { alert('请选择视频文件'); return; }
-      const objectName = f.name;
-      try {
-        log('1) 请求预签名 URL...');
-        const {url} = await presign(objectName, f.type || 'video/mp4');
-        log('2) 直传至 MinIO: ' + url.split('?')[0]);
-        await putToMinio(url, f);
-        log('3) 通知后端开始转码并上传 HLS...');
-        const { playUrl } = await ingest(objectName);
-        log('完成，CDN 播放地址: ' + playUrl);
-        document.getElementById('playUrl').textContent = playUrl;
-        playM3u8(playUrl);
-      } catch (e) {
-        console.error(e);
-        log('出错：' + e.message);
-      }
-    });
-  </script>
+<script src="https://unpkg.com/hls.js@latest"></script>
+<script>
+	const log = (msg) => {
+		const el = document.getElementById('log');
+		el.textContent += msg + "\n";
+		el.scrollTop = el.scrollHeight;
+	};
+	
+	async function presign(objectName, contentType) {
+		const resp = await fetch('/api/upload/presign', {
+			method: 'POST', headers: {'Content-Type': 'application/json'},
+			body: JSON.stringify({objectName, contentType})
+		});
+		if (!resp.ok) throw new Error('presign failed');
+		return resp.json();
+	}
+	
+	async function putToMinio(url, file) {
+		const r = await fetch(url, {method: 'PUT', headers: {'Content-Type': file.type}, body: file});
+		if (!r.ok) throw new Error('PUT to MinIO failed: ' + r.status);
+	}
+	
+	async function ingest(objectName) {
+		const resp = await fetch('/api/ingest', {
+			method: 'POST', headers: {'Content-Type': 'application/json'},
+			body: JSON.stringify({objectName})
+		});
+		if (!resp.ok) throw new Error('ingest failed');
+		return resp.json();
+	}
+	
+	function playM3u8(url) {
+		const video = document.getElementById('video');
+		const qualityControl = document.getElementById('qualityControl');
+		const qualitySelect = document.getElementById('qualitySelect');
+		
+		// 清空旧的清晰度选项
+		qualitySelect.innerHTML = '';
+		
+		if (video.canPlayType('application/vnd.apple.mpegurl')) {
+			video.src = url;
+			// 原生 HLS (如 Safari) 的清晰度控制是浏览器自带的，JS API 有限
+			qualityControl.style.display = 'none';
+			
+		} else if (Hls.isSupported()) {
+			const hls = new Hls();
+			
+			// 1. 监听：当 HLS 解析完 m3u8 清单后
+			hls.on(Hls.Events.MANIFEST_PARSED, function (event, data) {
+				if (data.levels.length > 1) {
+					log('检测到 ' + data.levels.length + ' 个清晰度级别。');
+					
+					// 2. 添加 "自动" 选项
+					const autoOption = document.createElement('option');
+					autoOption.value = -1; // hls.js 中 -1 代表自动
+					autoOption.innerText = '自动 (Auto)';
+					qualitySelect.appendChild(autoOption);
+					
+					// 3. 循环添加所有可用的清晰度级别
+					data.levels.forEach((level, index) => {
+						const option = document.createElement('option');
+						option.value = index; // 级别的索引
+						// 用高度 p 或 码率 kbps 来命名
+						const levelName = level.height ? `${level.height}p` : `${Math.round(level.bitrate / 1000)} kbps`;
+						option.innerText = levelName;
+						qualitySelect.appendChild(option);
+					});
+					
+					// 4. 显示清晰度选择器
+					qualityControl.style.display = 'block';
+					
+					// 5. 监听：当用户切换下拉菜单时
+					qualitySelect.addEventListener('change', () => {
+						// hls.currentLevel 属性用于手动切换清晰度
+						// -1 是自动，0+ 是指定级别的索引
+						hls.currentLevel = parseInt(qualitySelect.value, 10);
+						log('切换清晰度至: ' + qualitySelect.options[qualitySelect.selectedIndex].innerText);
+					});
+				} else {
+					qualityControl.style.display = 'none';
+				}
+			});
+			
+			hls.loadSource(url);
+			hls.attachMedia(video);
+		} else {
+			alert('Your browser cannot play HLS');
+		}
+	}
+	
+	async function getPlayUrl(objectName) {
+		// 使用 URLSearchParams 来正确编码 objectName 作为查询参数
+		const params = new URLSearchParams({ objectName });
+		
+		const resp = await fetch(`/api/upload/presign-get?${params.toString()}`, {
+			method: 'GET'
+		});
+		
+		if (!resp.ok) {
+			throw new Error(`getPlayUrl 失败: ${resp.status}`);
+		}
+		
+		// 您的 Java 方法返回 Map.of("url", url)，对应这里的 {url: "..."}
+		return resp.json();
+	}
+	
+	
+	document.getElementById('uploadBtn').addEventListener('click', async () => {
+		const f = document.getElementById('file').files[0];
+		if (!f) {
+			alert('请选择视频文件');
+			return;
+		}
+		const objectName = f.name;
+		try {
+			log('1) 请求预签名 URL...');
+			const {url} = await presign(objectName, f.type || 'video/mp4');
+			log('2) 直传至 MinIO: ' + url.split('?')[0]);
+			await putToMinio(url, f);
+			log('3) 通知后端开始转码并上传 HLS...');
+			const {playUrl} = await ingest(objectName);
+			log('完成，CDN 播放地址: ' + playUrl);
+			document.getElementById('playUrl').textContent = playUrl;
+			playM3u8(playUrl);
+		} catch (e) {
+			console.error(e);
+			log('出错：' + e.message);
+		}
+	});
+	
+	document.getElementById('playBtn').addEventListener('click', async () => {
+		const objectName = document.getElementById('videoNameInput').value;
+		if (!objectName) {
+			// 提示：用户需要输入 M3U8 文件的确切路径
+			alert('请输入对象名称 (例如: path/to/master.m3u8)');
+			return;
+		}
+		
+		try {
+			log(`1) 正在获取 [${objectName}] 的播放地址...`);
+			
+			// **修改点**: 调用新的 getPlayUrl 函数
+			// 您的 Java 代码返回 {"url": ...}，所以我们在这里解构 { url }
+			const { url } = await getPlayUrl(objectName);
+			
+			log(`2) 获取播放地址成功: ${url}`);
+			
+			// 更新页面上显示的播放地址
+			document.getElementById('playUrl').textContent = url;
+			
+			// 重用 playM3u8 函数来播放视频
+			playM3u8(url);
+			
+		} catch (e) {
+			console.error(e);
+			log(`出错：无法获取 [${objectName}] 的播放地址。 ${e.message}`);
+		}
+	});
+</script>
 </body>
 </html>

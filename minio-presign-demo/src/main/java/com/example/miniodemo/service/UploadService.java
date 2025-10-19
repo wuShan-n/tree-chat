@@ -31,14 +31,7 @@ public class UploadService {
 
     public PresignResp createPresignedPut(long ownerId, PresignReq req) {
         long id = Ids.newId();
-        String key = "images/%d/original".formatted(id);
-
-        // 确保 Bucket 存在（幂等）
-        try {
-            s3.createBucket(CreateBucketRequest.builder().bucket(bucket).build());
-        } catch (S3Exception ignored) {
-        }
-
+        String key = "/image/%d/original".formatted(id);
         Image record = new Image();
         record.setId(id);
         record.setOwnerId(ownerId);
@@ -50,18 +43,15 @@ public class UploadService {
         imageMapper.insert(record);
 
         PutObjectRequest put = PutObjectRequest.builder()
-                .bucket(bucket).key(key)
-                .contentType(req.contentType())
+                .bucket(bucket)
+                .key(key)
                 .build();
-
         PutObjectPresignRequest preq = PutObjectPresignRequest.builder()
-                .signatureDuration(Duration.ofMinutes(15))
                 .putObjectRequest(put)
+                .signatureDuration(Duration.ofMinutes(15))
                 .build();
-
         PresignedPutObjectRequest p = presigner.presignPutObject(preq);
+        return new PresignResp(String.valueOf(id),p.url().toString(),Map.of("Content-Type",req.contentType()));
 
-        // 浏览器上传时至少带上 Content-Type，其他 header 由 SDK 计算
-        return new PresignResp(String.valueOf(id), p.url().toString(), Map.of("Content-Type", req.contentType()));
     }
 }

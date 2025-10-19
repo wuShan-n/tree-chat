@@ -23,11 +23,6 @@ public class UploadController {
         this.bucket = bucket;
     }
 
-    @PostMapping(value = "/presign", consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE)
-    public Map<String, String> presignForm(@RequestParam("objectName") String objectName,
-                                           @RequestParam(value = "contentType", required = false, defaultValue = "video/mp4") String contentType) throws Exception {
-        return presign(objectName, contentType);
-    }
 
     @PostMapping(value = "/presign", consumes = MediaType.APPLICATION_JSON_VALUE)
     public Map<String, String> presignJson(@RequestBody Map<String, String> body) throws Exception {

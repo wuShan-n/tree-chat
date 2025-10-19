@@ -5,6 +5,7 @@ import com.example.miniodemo.entity.ImageVariant;
 import com.example.miniodemo.mapper.ImageMapper;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
+import net.coobird.thumbnailator.Thumbnails;
 import org.apache.tika.Tika;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
@@ -15,9 +16,9 @@ import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
-
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
 
@@ -27,7 +28,8 @@ public class ProcessingService {
     private final S3Client s3;
     private final ImageMapper imageMapper;
     private final Tika tika = new Tika();
-    @Value("${app.bucket}") String bucket;
+    @Value("${app.bucket}")
+    String bucket;
 
     @PostConstruct
     public void init() {
