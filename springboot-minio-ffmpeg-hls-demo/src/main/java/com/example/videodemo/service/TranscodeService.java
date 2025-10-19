@@ -1,42 +1,83 @@
 package com.example.videodemo.service;
 
-import io.minio.*;
 import jakarta.annotation.PostConstruct;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-
-import java.io.*;
+import software.amazon.awssdk.core.ResponseInputStream;
+import software.amazon.awssdk.core.exception.SdkException;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.CreateBucketConfiguration;
+import software.amazon.awssdk.services.s3.model.CreateBucketRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.services.s3.model.HeadBucketRequest;
+import software.amazon.awssdk.services.s3.model.NoSuchBucketException;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.S3Exception;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Locale;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 @Service
 public class TranscodeService {
 
-    private final MinioClient minio;
+    private static final Logger log = LoggerFactory.getLogger(TranscodeService.class);
+    private static final List<TranscodeVariant> VARIANTS = List.of(
+            new TranscodeVariant(1080, 5000, 5350, 7500, 22),
+            new TranscodeVariant(720, 2800, 2996, 4200, 24),
+            new TranscodeVariant(480, 1400, 1498, 2100, 26)
+    );
+    private static final String AUDIO_BITRATE = "128k";
+    private static final String AUDIO_CHANNELS = "2";
+    private static final String WORK_DIR_PREFIX = "hls-";
+
+    private final S3Client s3Client;
     private final String bucket;
+    private final String region;
     private final Path vodRoot;
     private final String cdnPublicBase;
     private final String vodPrefix;
 
-    public TranscodeService(MinioClient minio,
-                            @Value("${app.minio.bucket}") String bucket,
+    public TranscodeService(S3Client s3Client,
+                            @Value("${app.s3.bucket}") String bucket,
+                            @Value("${app.s3.region}") String region,
                             @Value("${app.cdn.publicBase}") String cdnPublicBase,
                             @Value("${app.output.prefix}") String vodPrefix) {
-        this.minio = minio;
+        this.s3Client = s3Client;
         this.bucket = bucket;
+        this.region = region;
         this.vodRoot = Path.of("storage/public/vod");
         this.cdnPublicBase = normalizeBase(cdnPublicBase);
         this.vodPrefix = ensureSuffix(vodPrefix, "/");
     }
 
-    private static String guessContentType(Path f) {
-        String n = f.getFileName().toString().toLowerCase(Locale.ROOT);
-        if (n.endsWith(".m3u8")) return "application/vnd.apple.mpegurl";
-        if (n.endsWith(".m4s")) return "video/iso.segment";
-        if (n.endsWith(".mp4")) return "video/mp4";
-        if (n.endsWith(".ts")) return "video/mp2t";
+    private static String guessContentType(Path file) {
+        String name = file.getFileName().toString().toLowerCase(Locale.ROOT);
+        if (name.endsWith(".m3u8")) {
+            return "application/vnd.apple.mpegurl";
+        }
+        if (name.endsWith(".m4s")) {
+            return "video/iso.segment";
+        }
+        if (name.endsWith(".mp4")) {
+            return "video/mp4";
+        }
+        if (name.endsWith(".ts")) {
+            return "video/mp2t";
+        }
         return "application/octet-stream";
     }
 
@@ -45,159 +86,237 @@ public class TranscodeService {
         return (idx > 0) ? name.substring(0, idx) : name;
     }
 
-    private static String ensureSuffix(String s, String suf) {
-        if (s == null || s.isEmpty()) return suf;
-        return s.endsWith(suf) ? s : s + suf;
+    private static String ensureSuffix(String value, String suffix) {
+        if (value == null || value.isEmpty()) {
+            return suffix;
+        }
+        return value.endsWith(suffix) ? value : value + suffix;
     }
 
     private static String normalizeBase(String base) {
-        if (base == null || base.isEmpty()) return "/vod/";
-        if (!base.endsWith("/")) base = base + "/";
-        return base;
+        if (base == null || base.isEmpty()) {
+            return "/vod/";
+        }
+        return base.endsWith("/") ? base : base + "/";
     }
 
     @PostConstruct
     public void ensureBucket() {
         try {
-            boolean exists = minio.bucketExists(BucketExistsArgs.builder().bucket(bucket).build());
-            if (!exists) {
-                minio.makeBucket(MakeBucketArgs.builder().bucket(bucket).build());
-                System.out.println("Created bucket '" + bucket + "'");
+            s3Client.headBucket(HeadBucketRequest.builder().bucket(bucket).build());
+        } catch (NoSuchBucketException noBucket) {
+            createBucket();
+        } catch (S3Exception ex) {
+            if (ex.statusCode() == 404) {
+                createBucket();
+            } else {
+                throw new RuntimeException("Failed to access S3 bucket %s".formatted(bucket), ex);
             }
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to ensure MinIO bucket", e);
         }
     }
 
-    public String transcodeToHls(String objectName) throws Exception {
+    private void createBucket() {
+        CreateBucketRequest.Builder builder = CreateBucketRequest.builder().bucket(bucket);
+        if (!"us-east-1".equalsIgnoreCase(region)) {
+            builder = builder.createBucketConfiguration(
+                    CreateBucketConfiguration.builder()
+                            .locationConstraint(region)
+                            .build());
+        }
+        try {
+            s3Client.createBucket(builder.build());
+        } catch (S3Exception ex) {
+            if (ex.statusCode() != 409) {
+                throw new RuntimeException("Failed to create S3 bucket %s".formatted(bucket), ex);
+            }
+        }
+    }
 
+    public String transcodeToHls(String objectKey) throws Exception {
         Files.createDirectories(vodRoot);
-        String baseName = stripExt(Path.of(objectName).getFileName().toString());
-        Path outDir = vodRoot.resolve(baseName);
-        if (!Files.exists(outDir)) Files.createDirectories(outDir);
-
-        // 1) 下载源文件到临时盘
-        Path tempDir = Path.of(System.getProperty("java.io.tmpdir"));
-        String tempFileName = "input-" + UUID.randomUUID() + ".mp4";
-        Path tmp = tempDir.resolve(tempFileName);
-
+        String baseName = stripExt(Path.of(objectKey).getFileName().toString());
+        Path workingDir = Files.createTempDirectory(vodRoot, WORK_DIR_PREFIX + baseName + "-");
+        Path outputDir = workingDir.resolve("hls");
+        Files.createDirectories(outputDir);
+        Path inputFile = Files.createTempFile(workingDir, "input-", ".mp4");
 
         try {
-            minio.downloadObject(DownloadObjectArgs.builder()
-                    .bucket(bucket).object(objectName)
-                    .filename(tmp.toAbsolutePath().toString())
-                    .build());
+            downloadSourceObject(objectKey, inputFile);
+            prepareVariantDirectories(outputDir);
 
-            // 构造 ffmpeg 命令：三档(1080/720/480) + CMAF HLS (fMP4)
-            List<String> cmd = new ArrayList<>(List.of(
-                    "ffmpeg", "-y",
-                    "-i", tmp.toAbsolutePath().toString(),
-
-                    // 三组(视频+音频)一一对应
-                    "-map", "0:v:0", "-map", "0:a:0?",
-                    "-map", "0:v:0", "-map", "0:a:0?",
-                    "-map", "0:v:0", "-map", "0:a:0?",
-
-                    // 三档视频
-                    "-c:v:0", "libx264", "-preset", "veryfast", "-crf", "22",
-                    "-filter:v:0", "scale=-2:1080",
-                    "-b:v:0", "5000k", "-maxrate:v:0", "5350k", "-bufsize:v:0", "7500k",
-
-                    "-c:v:1", "libx264", "-preset", "veryfast", "-crf", "24",
-                    "-filter:v:1", "scale=-2:720",
-                    "-b:v:1", "2800k", "-maxrate:v:1", "2996k", "-bufsize:v:1", "4200k",
-
-                    "-c:v:2", "libx264", "-preset", "veryfast", "-crf", "26",
-                    "-filter:v:2", "scale=-2:480",
-                    "-b:v:2", "1400k", "-maxrate:v:2", "1498k", "-bufsize:v:2", "2100k",
-
-                    // 三条音频（避免复用同一条 a:0）
-                    "-c:a:0", "aac", "-ac:0", "2", "-b:a:0", "128k",
-                    "-c:a:1", "aac", "-ac:1", "2", "-b:a:1", "128k",
-                    "-c:a:2", "aac", "-ac:2", "2", "-b:a:2", "128k",
-
-                    // 帧率/GOP
-                    "-r", "30", "-g", "60", "-keyint_min", "60", "-sc_threshold", "0",
-
-                    // 推荐去掉元数据/章节以免引发额外流
-                    "-map_metadata", "-1", "-map_chapters", "-1",
-
-                    // HLS (CMAF fMP4)
-                    "-f", "hls",
-                    "-hls_time", "4",
-                    "-hls_playlist_type", "vod",
-                    "-hls_segment_type", "fmp4",
-                    "-hls_flags", "independent_segments+split_by_time",
-                    "-master_pl_name", "master.m3u8",
-
-                    // 一一对应：v0↔a0, v1↔a1, v2↔a2
-                    "-var_stream_map", "v:0,a:0 v:1,a:1 v:2,a:2",
-
-                    "-hls_segment_filename", outDir.resolve("v%v/seg_%06d.m4s").toString().replace('\\', '/'),
-                    outDir.resolve("v%v/stream.m3u8").toString().replace('\\', '/')
-            ));
-
-            ProcessBuilder pb = new ProcessBuilder(cmd);
-            pb.redirectErrorStream(true);
-            Process p = pb.start();
-            try (BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
-                String line;
-                while ((line = br.readLine()) != null) {
-                    System.out.println(line);
-                }
-            }
-            int code = p.waitFor();
-            if (code != 0) {
-                throw new RuntimeException("ffmpeg failed, exit code=" + code);
+            List<String> ffmpegCommand = buildFfmpegCommand(inputFile, outputDir);
+            try {
+                runFfmpeg(ffmpegCommand);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("ffmpeg execution interrupted", ex);
             }
 
-            // 3) 上传 HLS 输出目录到 MinIO（保持目录结构）
             String keyPrefix = vodPrefix + baseName + "/";
-            uploadDirToMinio(outDir, keyPrefix);
-
-            // 4) 返回 CDN 播放地址
+            uploadDirToS3(outputDir, keyPrefix);
             return cdnPublicBase + baseName + "/master.m3u8";
         } finally {
-            try {
-                Files.deleteIfExists(tmp); // 清理临时输入文件
-                deleteDirectory(outDir);   // **(新) 清理临时输出目录**
-            } catch (IOException e) {
-                System.err.println("Failed to cleanup temp files: " + e.getMessage());
-                // 在生产中，这里应该记日志，而不是打印到控制台
-            }
+            deleteDirectory(workingDir);
         }
     }
 
-    private void uploadDirToMinio(Path localDir, String keyPrefix) throws Exception {
-        List<Path> files = Files.walk(localDir)
-                .filter(Files::isRegularFile)
-                .sorted()
-                .toList();
+    private void downloadSourceObject(String objectKey, Path destination) throws IOException {
+        GetObjectRequest request = GetObjectRequest.builder()
+                .bucket(bucket)
+                .key(objectKey)
+                .build();
+        try (ResponseInputStream<GetObjectResponse> response = s3Client.getObject(request);
+             OutputStream out = Files.newOutputStream(destination)) {
+            response.transferTo(out);
+        } catch (SdkException ex) {
+            throw new IOException("Failed to download S3 object %s".formatted(objectKey), ex);
+        }
+    }
 
-        for (Path f : files) {
-            String rel = localDir.relativize(f).toString().replace("\\", "/");
+    private void prepareVariantDirectories(Path outputDir) throws IOException {
+        for (int i = 0; i < VARIANTS.size(); i++) {
+            Files.createDirectories(outputDir.resolve("v" + i));
+        }
+    }
+
+    private List<String> buildFfmpegCommand(Path input, Path outDir) {
+        List<String> command = new ArrayList<>();
+        command.add("ffmpeg");
+        command.add("-y");
+        command.add("-i");
+        command.add(input.toAbsolutePath().toString());
+
+        for (int i = 0; i < VARIANTS.size(); i++) {
+            command.add("-map");
+            command.add("0:v:0");
+            command.add("-map");
+            command.add("0:a:0?");
+        }
+
+        for (int i = 0; i < VARIANTS.size(); i++) {
+            TranscodeVariant variant = VARIANTS.get(i);
+            command.add("-c:v:" + i);
+            command.add("libx264");
+            command.add("-preset");
+            command.add("veryfast");
+            command.add("-crf");
+            command.add(Integer.toString(variant.crf()));
+            command.add("-filter:v:" + i);
+            command.add("scale=-2:" + variant.height());
+            command.add("-b:v:" + i);
+            command.add(variant.videoBitrate());
+            command.add("-maxrate:v:" + i);
+            command.add(variant.maxRate());
+            command.add("-bufsize:v:" + i);
+            command.add(variant.bufferSize());
+
+            command.add("-c:a:" + i);
+            command.add("aac");
+            command.add("-ac:" + i);
+            command.add(AUDIO_CHANNELS);
+            command.add("-b:a:" + i);
+            command.add(AUDIO_BITRATE);
+        }
+
+        command.addAll(List.of(
+                "-r", "30",
+                "-g", "60",
+                "-keyint_min", "60",
+                "-sc_threshold", "0",
+                "-map_metadata", "-1",
+                "-map_chapters", "-1",
+                "-f", "hls",
+                "-hls_time", "4",
+                "-hls_playlist_type", "vod",
+                "-hls_segment_type", "fmp4",
+                "-hls_flags", "independent_segments+split_by_time",
+                "-master_pl_name", "master.m3u8",
+                "-var_stream_map", buildVarStreamMap(),
+                "-hls_segment_filename", outDir.resolve("v%v/seg_%06d.m4s").toString().replace('\\', '/'),
+                outDir.resolve("v%v/stream.m3u8").toString().replace('\\', '/')
+        ));
+        return command;
+    }
+
+    private String buildVarStreamMap() {
+        return IntStream.range(0, VARIANTS.size())
+                .mapToObj(i -> "v:%d,a:%d".formatted(i, i))
+                .collect(Collectors.joining(" "));
+    }
+
+    private void runFfmpeg(List<String> command) throws IOException, InterruptedException {
+        log.info("Invoking ffmpeg with {} arguments", command.size());
+        ProcessBuilder processBuilder = new ProcessBuilder(command);
+        processBuilder.redirectErrorStream(true);
+        Process process = processBuilder.start();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                log.info("[ffmpeg] {}", line);
+            }
+        }
+        int exitCode = process.waitFor();
+        if (exitCode != 0) {
+            throw new IOException("ffmpeg failed, exit code=" + exitCode);
+        }
+    }
+
+    private void uploadDirToS3(Path localDir, String keyPrefix) throws IOException {
+        List<Path> files;
+        try (Stream<Path> walk = Files.walk(localDir)) {
+            files = walk.filter(Files::isRegularFile)
+                    .sorted()
+                    .toList();
+        }
+
+        for (Path file : files) {
+            String rel = localDir.relativize(file).toString().replace("\\", "/");
             String key = keyPrefix + rel;
-            String contentType = guessContentType(f);
-            long size = Files.size(f);
+            String contentType = guessContentType(file);
 
-            try (InputStream is = Files.newInputStream(f)) {
-                PutObjectArgs args = PutObjectArgs.builder()
-                        .bucket(bucket)
-                        .object(key)
-                        .contentType(contentType)
-                        .stream(is, size, -1)
-                        .build();
-                minio.putObject(args);
-                System.out.println("Uploaded: " + key + " (" + contentType + ")");
+            PutObjectRequest request = PutObjectRequest.builder()
+                    .bucket(bucket)
+                    .key(key)
+                    .contentType(contentType)
+                    .build();
+            try {
+                s3Client.putObject(request, RequestBody.fromFile(file));
+                log.info("Uploaded {} ({}).", key, contentType);
+            } catch (SdkException ex) {
+                throw new IOException("Failed to upload HLS artifact to S3 key %s".formatted(key), ex);
             }
         }
     }
-    private void deleteDirectory(Path path) throws IOException {
-        if (!Files.exists(path)) return;
+
+    private void deleteDirectory(Path path) {
+        if (path == null || !Files.exists(path)) {
+            return;
+        }
+
         try (Stream<Path> walk = Files.walk(path)) {
-            walk.sorted(Comparator.reverseOrder())
-                    .map(Path::toFile)
-                    .forEach(File::delete);
+            walk.sorted(Comparator.reverseOrder()).forEach(p -> {
+                try {
+                    Files.deleteIfExists(p);
+                } catch (IOException ex) {
+                    log.warn("Failed to delete temp path {}", p, ex);
+                }
+            });
+        } catch (IOException ex) {
+            log.warn("Failed to cleanup working directory {}", path, ex);
+        }
+    }
+
+    private record TranscodeVariant(int height, int videoBitrateKbps, int maxBitrateKbps, int bufferSizeKbps, int crf) {
+        String videoBitrate() {
+            return videoBitrateKbps + "k";
+        }
+
+        String maxRate() {
+            return maxBitrateKbps + "k";
+        }
+
+        String bufferSize() {
+            return bufferSizeKbps + "k";
         }
     }
 }

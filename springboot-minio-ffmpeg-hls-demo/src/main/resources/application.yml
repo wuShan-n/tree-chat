@@ -2,11 +2,13 @@ server:
   port: 8080
 
 app:
-  minio:
+  s3:
     endpoint: http://localhost:9000
+    region: us-east-1
     accessKey: minioadmin
     secretKey: minioadmin
     bucket: videos
+    pathStyleAccess: true
   cdn:
     # 生产环境改成你的 CDN 域名，如 https://cdn.example.com/vod/
     publicBase: http://localhost:9000/videos/vod/
@@ -15,6 +17,22 @@ app:
     prefix: vod/
 
 spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/videodb
+    driver-class-name: org.postgresql.Driver
+    username: postgres
+    password: postgres
+  sql:
+    init:
+      mode: never
+      schema-locations: classpath:schema-postgres.sql
   web:
     resources:
       static-locations: classpath:/static/
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      logic-delete-field: deleted
