@@ -1,5 +1,6 @@
 package com.example.videodemo.service;
 
+import com.example.videodemo.service.dto.TranscodeResult;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,8 +24,11 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.stream.Collectors;
@@ -132,7 +136,7 @@ public class TranscodeService {
         }
     }
 
-    public String transcodeToHls(String objectKey) throws Exception {
+    public TranscodeResult transcodeToHls(String objectKey) throws Exception {
         Files.createDirectories(vodRoot);
         String baseName = stripExt(Path.of(objectKey).getFileName().toString());
         Path workingDir = Files.createTempDirectory(vodRoot, WORK_DIR_PREFIX + baseName + "-");
@@ -153,8 +157,11 @@ public class TranscodeService {
             }
 
             String keyPrefix = vodPrefix + baseName + "/";
+            List<TranscodeResult.VariantDescriptor> variants = collectVariantMetadata(outputDir, keyPrefix);
             uploadDirToS3(outputDir, keyPrefix);
-            return cdnPublicBase + baseName + "/master.m3u8";
+            return new TranscodeResult(
+                    cdnPublicBase + baseName + "/master.m3u8",
+                    List.copyOf(variants));
         } finally {
             deleteDirectory(workingDir);
         }
@@ -303,6 +310,98 @@ public class TranscodeService {
             });
         } catch (IOException ex) {
             log.warn("Failed to cleanup working directory {}", path, ex);
+        }
+    }
+
+    private List<TranscodeResult.VariantDescriptor> collectVariantMetadata(Path outputDir, String keyPrefix) throws IOException {
+        List<String> resolutions = extractResolutions(outputDir.resolve("master.m3u8"));
+        List<TranscodeResult.VariantDescriptor> result = new ArrayList<>();
+        for (int i = 0; i < VARIANTS.size(); i++) {
+            Path playlist = outputDir.resolve("v" + i).resolve("stream.m3u8");
+            String resolution = (i < resolutions.size() && resolutions.get(i) != null)
+                    ? resolutions.get(i)
+                    : VARIANTS.get(i).height() + "p";
+            Integer duration = calculatePlaylistDurationSeconds(playlist);
+            String checksum = checksum(playlist);
+            result.add(new TranscodeResult.VariantDescriptor(
+                    i,
+                    resolution,
+                    VARIANTS.get(i).videoBitrateKbps(),
+                    keyPrefix + "v" + i + "/stream.m3u8",
+                    keyPrefix + "v" + i + "/",
+                    duration,
+                    checksum));
+        }
+        return result;
+    }
+
+    private List<String> extractResolutions(Path masterPlaylist) throws IOException {
+        List<String> resolutions = new ArrayList<>();
+        if (!Files.exists(masterPlaylist)) {
+            return resolutions;
+        }
+        List<String> lines = Files.readAllLines(masterPlaylist);
+        for (String line : lines) {
+            if (line.startsWith("#EXT-X-STREAM-INF")) {
+                resolutions.add(parseResolution(line));
+            }
+        }
+        return resolutions;
+    }
+
+    private String parseResolution(String headerLine) {
+        String[] parts = headerLine.split(",");
+        for (String part : parts) {
+            String trimmed = part.trim();
+            if (trimmed.startsWith("RESOLUTION=")) {
+                return trimmed.substring("RESOLUTION=".length());
+            }
+        }
+        return null;
+    }
+
+    private Integer calculatePlaylistDurationSeconds(Path playlist) throws IOException {
+        if (!Files.exists(playlist)) {
+            return null;
+        }
+        List<String> lines = Files.readAllLines(playlist);
+        double totalSeconds = 0.0;
+        for (String line : lines) {
+            if (line.startsWith("#EXTINF:")) {
+                String payload = line.substring("#EXTINF:".length());
+                int comma = payload.indexOf(',');
+                if (comma >= 0) {
+                    payload = payload.substring(0, comma);
+                }
+                try {
+                    totalSeconds += Double.parseDouble(payload);
+                } catch (NumberFormatException ignored) {
+                    // skip malformed duration markers
+                }
+            }
+        }
+        if (totalSeconds <= 0.0) {
+            return null;
+        }
+        return (int) Math.round(totalSeconds);
+    }
+
+    private String checksum(Path file) throws IOException {
+        if (!Files.exists(file)) {
+            return null;
+        }
+        try {
+            MessageDigest digest = MessageDigest.getInstance("MD5");
+            byte[] buffer = new byte[8192];
+            try (var in = Files.newInputStream(file)) {
+                int read;
+                while ((read = in.read(buffer)) != -1) {
+                    digest.update(buffer, 0, read);
+                }
+            }
+            return HexFormat.of().formatHex(digest.digest());
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("MD5 digest not available", ex);
         }
     }
 

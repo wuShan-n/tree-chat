@@ -1,16 +1,12 @@
 package com.example.videodemo.service;
 
-import com.example.videodemo.controller.dto.PresignGetResponse;
-import com.example.videodemo.controller.dto.PresignUploadRequest;
-import com.example.videodemo.controller.dto.PresignUploadResponse;
+import com.example.videodemo.controller.vo.PresignUploadRequest;
+import com.example.videodemo.controller.vo.PresignUploadResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
-import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
-import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
-import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PresignedPutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 
@@ -21,7 +17,6 @@ import java.util.Optional;
 public class UploadPresignService {
 
     private static final Duration UPLOAD_TTL = Duration.ofMinutes(15);
-    private static final Duration DOWNLOAD_TTL = Duration.ofMinutes(10);
     private static final String DEFAULT_CONTENT_TYPE = "video/mp4";
 
     private final S3Presigner presigner;
@@ -56,24 +51,6 @@ public class UploadPresignService {
                 contentType);
     }
 
-    public PresignGetResponse createDownloadUrl(String objectName) {
-        String key = resolveObjectName(objectName);
-
-        GetObjectRequest request = GetObjectRequest.builder()
-                .bucket(bucket)
-                .key(key)
-                .build();
-
-        GetObjectPresignRequest presignRequest = GetObjectPresignRequest.builder()
-                .signatureDuration(DOWNLOAD_TTL)
-                .getObjectRequest(request)
-                .build();
-
-        PresignedGetObjectRequest presigned = presigner.presignGetObject(presignRequest);
-        return new PresignGetResponse(
-                presigned.url().toString(),
-                presigned.httpRequest().method().name());
-    }
 
     private String resolveObjectName(String objectName) {
         if (StringUtils.hasText(objectName)) {

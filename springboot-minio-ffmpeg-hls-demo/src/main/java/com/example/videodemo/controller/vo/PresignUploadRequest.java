@@ -1,4 +1,4 @@
-package com.example.videodemo.controller.dto;
+package com.example.videodemo.controller.vo;
 
 public record PresignUploadRequest(String objectName, String contentType) {
 }

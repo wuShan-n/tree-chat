@@ -1,7 +1,7 @@
 package com.example.videodemo.controller;
 
-import com.example.videodemo.controller.dto.IngestRequest;
-import com.example.videodemo.controller.dto.IngestResponse;
+import com.example.videodemo.controller.vo.IngestRequest;
+import com.example.videodemo.controller.vo.IngestResponse;
 import com.example.videodemo.service.DirectIngestService;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;

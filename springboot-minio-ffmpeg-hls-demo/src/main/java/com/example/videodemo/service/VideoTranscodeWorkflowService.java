@@ -1,12 +1,17 @@
 package com.example.videodemo.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.example.videodemo.persistence.entity.TranscodeJobStatus;
 import com.example.videodemo.persistence.entity.VideoAsset;
 import com.example.videodemo.persistence.entity.VideoAssetStatus;
 import com.example.videodemo.persistence.entity.VideoTranscodeJob;
+import com.example.videodemo.persistence.entity.VideoTranscodeVariant;
 import com.example.videodemo.persistence.mapper.VideoAssetMapper;
 import com.example.videodemo.persistence.mapper.VideoTranscodeJobMapper;
+import com.example.videodemo.persistence.mapper.VideoTranscodeVariantMapper;
+import com.example.videodemo.service.dto.TranscodeResult;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -25,6 +30,7 @@ public class VideoTranscodeWorkflowService {
     private final VideoTranscodeJobMapper transcodeJobMapper;
     private final VideoAssetMapper videoAssetMapper;
     private final TranscodeService transcodeService;
+    private final VideoTranscodeVariantMapper transcodeVariantMapper;
     private final TransactionTemplate transactionTemplate;
     @Qualifier("transcodeExecutor")
     private final TaskExecutor transcodeExecutor;
@@ -45,8 +51,8 @@ public class VideoTranscodeWorkflowService {
         }
 
         try {
-            String playbackUrl = transcodeService.transcodeToHls(context.asset().getSourceObject());
-            markSuccess(jobId, playbackUrl);
+            TranscodeResult result = transcodeService.transcodeToHls(context.asset().getSourceObject());
+            markSuccess(jobId, context.asset().getId(), result);
         } catch (Exception ex) {
             log.error("Transcode job {} failed.", jobId, ex);
             markFailure(jobId, ex.getMessage());
@@ -94,7 +100,7 @@ public class VideoTranscodeWorkflowService {
         });
     }
 
-    private void markSuccess(Long jobId, String playbackUrl) {
+    private void markSuccess(Long jobId, Long videoId, TranscodeResult result) {
         transactionTemplate.executeWithoutResult(status -> {
             VideoTranscodeJob job = Optional.ofNullable(transcodeJobMapper.selectById(jobId))
                     .orElseThrow(() -> new IllegalStateException("Transcode job not found during success handling: " + jobId));
@@ -108,8 +114,10 @@ public class VideoTranscodeWorkflowService {
                     .orElseThrow(() -> new IllegalStateException("Video asset not found during success handling: " + job.getVideoId()));
             asset.setStatus(VideoAssetStatus.READY.name());
             asset.setReadyAt(LocalDateTime.now());
-            asset.setPlaybackUrl(playbackUrl);
+            asset.setPlaybackUrl(result.playbackUrl());
             videoAssetMapper.updateById(asset);
+
+            persistVariants(jobId, videoId, result.variants());
         });
     }
 
@@ -134,5 +142,30 @@ public class VideoTranscodeWorkflowService {
     }
 
     private record VideoJobContext(VideoTranscodeJob job, VideoAsset asset) {
+    }
+
+    private void persistVariants(Long jobId, Long videoId, List<TranscodeResult.VariantDescriptor> variants) {
+        transcodeVariantMapper.delete(
+                new LambdaQueryWrapper<VideoTranscodeVariant>()
+                        .eq(VideoTranscodeVariant::getJobId, jobId));
+
+        if (variants == null || variants.isEmpty()) {
+            return;
+        }
+
+        for (TranscodeResult.VariantDescriptor descriptor : variants) {
+            VideoTranscodeVariant variant = VideoTranscodeVariant.builder()
+                    .jobId(jobId)
+                    .videoId(videoId)
+                    .variantLevel(descriptor.level())
+                    .resolution(descriptor.resolution())
+                    .bitrateKbps(descriptor.bitrateKbps())
+                    .playlistPath(descriptor.playlistPath())
+                    .segmentPathPrefix(descriptor.segmentPathPrefix())
+                    .durationSeconds(descriptor.durationSeconds())
+                    .checksum(descriptor.checksum())
+                    .build();
+            transcodeVariantMapper.insert(variant);
+        }
     }
 }

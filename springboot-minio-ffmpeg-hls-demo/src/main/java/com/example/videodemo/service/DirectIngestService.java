@@ -1,6 +1,6 @@
 package com.example.videodemo.service;
 
-import com.example.videodemo.controller.dto.IngestResponse;
+import com.example.videodemo.controller.vo.IngestResponse;
 import com.example.videodemo.service.dto.CompleteUploadCommand;
 import com.example.videodemo.service.dto.CreateUploadCommand;
 import com.example.videodemo.service.dto.IngestResult;

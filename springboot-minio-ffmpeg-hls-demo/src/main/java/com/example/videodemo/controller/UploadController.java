@@ -1,8 +1,7 @@
 package com.example.videodemo.controller;
 
-import com.example.videodemo.controller.dto.PresignGetResponse;
-import com.example.videodemo.controller.dto.PresignUploadRequest;
-import com.example.videodemo.controller.dto.PresignUploadResponse;
+import com.example.videodemo.controller.vo.PresignUploadRequest;
+import com.example.videodemo.controller.vo.PresignUploadResponse;
 import com.example.videodemo.service.UploadPresignService;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
@@ -21,8 +20,5 @@ public class UploadController {
         return uploadPresignService.createUploadUrl(request);
     }
 
-    @GetMapping("/presign-get")
-    public PresignGetResponse presignDownload(@RequestParam("objectName") String objectName) {
-        return uploadPresignService.createDownloadUrl(objectName);
-    }
+
 }
