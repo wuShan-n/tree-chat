@@ -40,8 +40,8 @@ public class TranscodeService {
 
     private static final Logger log = LoggerFactory.getLogger(TranscodeService.class);
     private static final List<TranscodeVariant> VARIANTS = List.of(
-            new TranscodeVariant(1080, 5000, 5350, 7500, 22)
-//            new TranscodeVariant(720, 2800, 2996, 4200, 24),
+            new TranscodeVariant(1080, 5000, 5350, 7500, 22),
+            new TranscodeVariant(720, 2800, 2996, 4200, 24)
 //            new TranscodeVariant(480, 1400, 1498, 2100, 26)
     );
     private static final String AUDIO_BITRATE = "128k";

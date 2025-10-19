@@ -4,15 +4,20 @@
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>Video Service Test Page</title>
+	
+	<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+	
 	<style>
 		body { font-family: sans-serif; margin: 20px; background: #f4f4f4; }
 		.container { max-width: 800px; margin: auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
 		h2 { border-bottom: 2px solid #eee; padding-bottom: 5px; }
 		input[type="text"], input[type="file"] { width: 98%; padding: 8px; margin-bottom: 10px; }
-		button { padding: 10px 15px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+		button { padding: 10px 15px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 5px;}
 		button:hover { background: #0056b3; }
+		button.direct-load { background: #28a745; }
+		button.direct-load:hover { background: #218838; }
 		pre { background: #222; color: #00ff00; padding: 15px; border-radius: 5px; overflow-x: auto; max-height: 400px; }
-		video { max-width: 100%; border: 1px solid #ccc; margin-top: 10px; }
+		video { max-width: 100%; border: 1px solid #ccc; margin-top: 10px; background: #000; }
 		.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 		.section { margin-bottom: 20px; }
 	</style>
@@ -29,23 +34,16 @@
 		</div>
 		
 		<div class="section">
-			<h2>Step 2: Check Ingest Status</h2>
+			<h2>Step 2 & 3: Status & Playback</h2>
 			<input type="text" id="videoIdInput" placeholder="Video ID (auto-filled from Step 1)">
-			<button id="statusButton">2. Check Status Manually</button>
+			<button id="statusButton">2. Check Status (Polling)</button>
+			<button id="loadPlaybackButton" class="direct-load">3. Get Playback URL & Play (Direct)</button>
 		</div>
 	</div>
 	
 	<div class="section">
-		<h2>Utility: Get Presigned Download URL</h2>
-		<input type="text" id="objectNameInput" placeholder="Enter objectName (e.g., my-video.mp4)">
-		<button id="getDownloadUrlButton">Get Download URL</button>
-	</div>
-	
-	<div class="section">
-		<h2>Playback</h2>
-		<video id="videoPlayer" controls muted playsinline>
-			<source id="videoSource" src="" type="application/vnd.apple.mpegurl">
-		</video>
+		<h2>Playback Player</h2>
+		<video id="videoPlayer" controls muted playsinline></video>
 	</div>
 	
 	<h2>Logs</h2>
@@ -53,9 +51,7 @@
 </div>
 
 <script>
-	// 从 application.yml 获取
 	const API_BASE_URL = 'http://localhost:8080';
-	// S3 存储桶名称
 	const BUCKET_NAME = 'videos';
 	
 	// DOM Elements
@@ -63,11 +59,13 @@
 	const uploadButton = document.getElementById('uploadButton');
 	const videoIdInput = document.getElementById('videoIdInput');
 	const statusButton = document.getElementById('statusButton');
-	const objectNameInput = document.getElementById('objectNameInput');
-	const getDownloadUrlButton = document.getElementById('getDownloadUrlButton');
+	const loadPlaybackButton = document.getElementById('loadPlaybackButton');
 	const logOutput = document.getElementById('logOutput');
 	const videoPlayer = document.getElementById('videoPlayer');
-	const videoSource = document.getElementById('videoSource');
+	// 移除了 videoSource
+	
+	let lastPolledStatus = '';
+	let hls = new Hls(); // (新增) 3. 创建一个 HLS 实例
 	
 	// --- Logger ---
 	function log(message) {
@@ -80,6 +78,25 @@
 		log(prettyJson);
 	}
 	
+	// (新增) 4. 创建一个加载视频的辅助函数
+	function loadVideo(url) {
+		if (Hls.isSupported()) {
+			log('HLS.js is supported. Loading video...');
+			hls.loadSource(url);
+			hls.attachMedia(videoPlayer);
+			hls.on(Hls.Events.MANIFEST_PARSED, function() {
+				videoPlayer.play();
+			});
+		} else if (videoPlayer.canPlayType('application/vnd.apple.mpegurl')) {
+			// 备用：针对 Safari 浏览器
+			log('Native HLS supported. Loading video...');
+			videoPlayer.src = url;
+			videoPlayer.addEventListener('loadedmetadata', function() {
+				videoPlayer.play();
+			});
+		}
+	}
+	
 	// --- Step 1: Upload and Ingest Workflow ---
 	uploadButton.addEventListener('click', async () => {
 		const file = fileInput.files[0];
@@ -90,12 +107,10 @@
 		
 		log(`Selected file: ${file.name} (${file.type})`);
 		
-		// 使用唯一名称，避免 S3 冲突
 		const objectName = `uploads/${Date.now()}-${file.name}`;
 		log(`Using objectName: ${objectName}`);
 		
 		try {
-			// 1. Get Presigned URL from our backend
 			log('1/4: Requesting presigned URL...');
 			const presignReq = {
 				objectName: objectName,
@@ -112,10 +127,9 @@
 			const presignData = await presignRes.json();
 			logJson(presignData);
 			
-			// 2. Upload file to S3 (MinIO)
 			log('2/4: Uploading file to S3...');
 			const s3UploadRes = await fetch(presignData.url, {
-				method: 'PUT', // The service returns 'PUT'
+				method: 'PUT',
 				headers: { 'Content-Type': file.type },
 				body: file
 			});
@@ -123,7 +137,6 @@
 			if (!s3UploadRes.ok) throw new Error(`S3 upload failed: ${s3UploadRes.statusText}`);
 			log('S3 upload successful.');
 			
-			// 3. Complete Ingest
 			log('3/4: Notifying backend to start ingest...');
 			const ingestReq = { objectName: presignData.objectName };
 			const ingestRes = await fetch(`${API_BASE_URL}/api/ingest`, {
@@ -138,8 +151,8 @@
 			logJson(ingestData);
 			
 			videoIdInput.value = ingestData.videoId;
+			lastPolledStatus = '';
 			
-			// 4. Start polling
 			log('4/4: Starting status polling...');
 			checkStatus(ingestData.videoId);
 			
@@ -149,13 +162,14 @@
 		}
 	});
 	
-	// --- Step 2: Status Checking ---
+	// --- Step 2: Status Checking (Polling) ---
 	statusButton.addEventListener('click', () => {
 		const videoId = videoIdInput.value;
 		if (!videoId) {
 			log('ERROR: No Video ID provided.');
 			return;
 		}
+		lastPolledStatus = '';
 		checkStatus(videoId);
 	});
 	
@@ -168,17 +182,29 @@
 			if (!res.ok) throw new Error(`Status check failed: ${res.statusText}`);
 			
 			const data = await res.json();
+			log("Ingest Status Response:");
 			logJson(data);
 			
-			if (data.jobStatus === 'SUCCESS' || data.assetStatus === 'READY') {
+			const currentStatus = data.jobStatus || data.assetStatus;
+			
+			if (currentStatus === 'SUCCESS' || currentStatus === 'READY') {
 				log('SUCCESS: Transcoding complete. Playback URL is ready.');
-				videoSource.src = data.playbackUrl;
-				videoPlayer.load();
-		
-			} else if (data.jobStatus === 'FAILED' || data.assetStatus === 'FAILED') {
+				
+				// (修改) 5. 使用新的加载函数
+				loadVideo(data.playbackUrl);
+				
+				if (lastPolledStatus !== 'READY') {
+					log('Fetching detailed playback info using /api/videos/{videoId}/playback...');
+					await getPlaybackDetails(videoId);
+				}
+				lastPolledStatus = 'READY';
+				
+			} else if (currentStatus === 'FAILED') {
 				log('FAILED: Transcoding failed.');
+				lastPolledStatus = 'FAILED';
 			} else {
-				log(`Status is ${data.jobStatus}. Polling again in 5 seconds...`);
+				log(`Status is ${currentStatus}. Polling again in 5 seconds...`);
+				lastPolledStatus = currentStatus;
 				setTimeout(() => checkStatus(videoId), 5000);
 			}
 		} catch (error) {
@@ -186,26 +212,53 @@
 		}
 	}
 	
-	// --- Utility: Get Download URL ---
-	getDownloadUrlButton.addEventListener('click', async () => {
-		const objectName = objectNameInput.value;
-		if (!objectName) {
-			log('ERROR: Please enter an objectName.');
-			return;
-		}
-		
-		log(`Requesting download URL for: ${objectName}`);
+	// 辅助函数 (保留)
+	async function getPlaybackDetails(videoId) {
 		try {
-			const res = await fetch(`${API_BASE_URL}/api/upload/presign-get?objectName=${encodeURIComponent(objectName)}`);
-			if (!res.ok) throw new Error(`Failed to get download URL: ${res.statusText}`);
+			const res = await fetch(`${API_BASE_URL}/api/videos/${videoId}/playback`);
+			if (!res.ok) throw new Error(`Failed to get playback details: ${res.statusText}`);
 			
 			const data = await res.json();
+			log("Detailed Playback Response (from new API):");
 			logJson(data);
-			log(`Download URL (valid for 10 min): ${data.url}`);
 		} catch (error) {
-			log(`ERROR: ${error.message}`);
+			log(`ERROR fetching playback details: ${error.message}`);
 		}
+	}
+	
+	// --- Step 3: Direct Playback Load ---
+	loadPlaybackButton.addEventListener('click', () => {
+		const videoId = videoIdInput.value;
+		if (!videoId) {
+			log('ERROR: No Video ID provided.');
+			return;
+		}
+		log(`Fetching playback URL directly for video ${videoId}...`);
+		loadPlaybackDirectly(videoId);
 	});
+	
+	async function loadPlaybackDirectly(videoId) {
+		try {
+			const res = await fetch(`${API_BASE_URL}/api/videos/${videoId}/playback`);
+			if (!res.ok) throw new Error(`Failed to get playback details: ${res.statusText}`);
+			
+			const data = await res.json();
+			log("Direct Playback Response (from Step 3):");
+			logJson(data);
+			
+			if (data && data.playbackUrl) {
+				log(`Loading URL: ${data.playbackUrl}`);
+				
+				// (修改) 6. 使用新的加载函数
+				loadVideo(data.playbackUrl);
+				
+			} else {
+				log('ERROR: Playback URL not found in response.');
+			}
+		} catch (error) {
+			log(`ERROR fetching playback details: ${error.message}`);
+		}
+	}
 
 </script>
 </body>
