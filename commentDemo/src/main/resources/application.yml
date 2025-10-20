@@ -1,0 +1,20 @@
+spring:
+  application:
+    name: comment-service
+  main:
+    web-application-type: reactive
+  r2dbc:
+    url: r2dbc:postgresql://localhost:5432/comment_mod
+    username: postgres
+    password: postgres
+logging:
+  level:
+    com.example.commentdemo: DEBUG
+springdoc:
+  api-docs:
+    version: OPENAPI_3_1
+  swagger-ui:
+    urls:
+      - name: Comment Module Contract
+        url: /comment.yaml
+    disable-swagger-default-url: true
