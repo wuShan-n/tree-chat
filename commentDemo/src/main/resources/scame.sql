@@ -9,16 +9,6 @@ CREATE EXTENSION IF NOT EXISTS citext;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;  -- gen_random_uuid()
 
 
--- ================== 枚举类型（仅模块内使用） ==================
-DO $$
-    BEGIN
-        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'comment_status') THEN
-            CREATE TYPE comment_status AS ENUM ('published','pending','hidden','deleted','spam');
-        END IF;
-        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'reaction_type') THEN
-            CREATE TYPE reaction_type AS ENUM ('up','down','emoji');
-        END IF;
-    END$$;
 
 -- ================== 主体注册表（模块对外最小契约） ==================
 -- 外部系统将业务对象（文章、视频、Issue…）注册为 subject。
@@ -45,7 +35,7 @@ CREATE TABLE comment (
     -- 层级结构（仅模块内自引用）
                                      root_id         BIGINT,
                                      parent_id       BIGINT,
-                                     path            LTREE NOT NULL,
+                                     path            LTREE ,
 
     -- 作者标识（不外键到用户模块，交由 API 约束）
                                      author_id       BIGINT NOT NULL,                 -- 外部用户的数值ID
@@ -54,7 +44,7 @@ CREATE TABLE comment (
     -- 内容与状态
                                      body_md         TEXT   NOT NULL,                 -- markdown/纯文本
                                      body_html       TEXT,                            -- 经过服务端白名单清洗后的 HTML（可选）
-                                     status          comment_status NOT NULL DEFAULT 'published',
+                                     status          VARCHAR(20) NOT NULL DEFAULT 'published', -- [修改]
                                      toxicity_score  NUMERIC(4,3),                    -- AI 评分（可选）
 
     -- 计数
@@ -74,7 +64,9 @@ CREATE TABLE comment (
                                      CONSTRAINT fk_comment_parent FOREIGN KEY (parent_id) REFERENCES comment(id) ON DELETE CASCADE,
                                      CONSTRAINT fk_comment_root   FOREIGN KEY (root_id)   REFERENCES comment(id) ON DELETE CASCADE,
                                      CONSTRAINT chk_parent_not_self CHECK (parent_id IS NULL OR parent_id <> id),
-                                     CONSTRAINT chk_root_when_has_parent CHECK (parent_id IS NULL OR root_id IS NOT NULL)
+                                     CONSTRAINT chk_root_when_has_parent CHECK (parent_id IS NULL OR root_id IS NOT NULL),
+                                     -- [新增] CHECK 约束替代 ENUM
+                                     CONSTRAINT chk_comment_status CHECK (status IN ('published','pending','hidden','deleted','spam'))
 );
 
 -- 读写与结构索引
@@ -93,13 +85,14 @@ CREATE TABLE comment_reaction (
                                               comment_id  BIGINT NOT NULL REFERENCES comment(id) ON DELETE CASCADE,
                                               actor_id    BIGINT NOT NULL,                           -- 外部用户ID（无外键）
                                               actor_urn   CITEXT,                                    -- 可选
-                                              type        reaction_type NOT NULL,
+                                              type        VARCHAR(20) NOT NULL,                      -- [修改]
                                               emoji_code  TEXT,                                      -- type='emoji' 时需要
                                               created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
                                               CONSTRAINT chk_emoji_requires_code CHECK ((type <> 'emoji') OR (emoji_code IS NOT NULL)),
-                                              CONSTRAINT uq_actor_reaction UNIQUE (comment_id, actor_id, type, COALESCE(emoji_code,''))
+                                              CONSTRAINT chk_reaction_type CHECK (type IN ('up','down','emoji'))   -- [新增] CHECK 约束替代 ENUM
 );
-
+CREATE UNIQUE INDEX uq_actor_reaction_idx
+    ON comment_reaction (comment_id, actor_id, type, COALESCE(emoji_code,''));
 -- ================== 举报与审核动作（模块内治理） ==================
 CREATE TABLE comment_report (
                                             id          BIGSERIAL PRIMARY KEY,
@@ -131,23 +124,27 @@ DECLARE
     p_path  ltree;
     p_root  BIGINT;
 BEGIN
+    -- 注意：在 BEFORE INSERT 中，BIGSERIAL/IDENTITY 的 NEW.id 已经可用
     IF NEW.parent_id IS NULL THEN
-        UPDATE comment
-        SET root_id = NEW.id,
-            path    = to_ltree('c' || NEW.id::text)
-        WHERE id = NEW.id;
+        -- 顶层评论：root 指向自身，path 为 c{id}
+        NEW.root_id := NEW.id;
+        NEW.path    := ('c' || NEW.id::text)::ltree;
     ELSE
-        SELECT path, root_id INTO p_path, p_root FROM comment WHERE id = NEW.parent_id FOR SHARE;
+        -- 子评论：继承父的 root/path，并把自己拼到 path 后
+        SELECT path, root_id INTO p_path, p_root
+        FROM comment
+        WHERE id = NEW.parent_id
+            FOR SHARE;
+
         IF p_path IS NULL OR p_root IS NULL THEN
             RAISE EXCEPTION 'Parent comment(%) not found or invalid', NEW.parent_id;
         END IF;
-        UPDATE comment
-        SET root_id = p_root,
-            path    = p_path || to_ltree('c' || NEW.id::text)
-        WHERE id = NEW.id;
+
+        NEW.root_id := p_root;
+        NEW.path    := p_path || ('c' || NEW.id::text)::ltree;
     END IF;
 
-    -- 更新主体的 last_commented_at 与计数（总数+1；若可见则可见数+1）
+    -- 同步主体计数与最近评论时间（这部分放 BEFORE 也没问题，失败会整体回滚）
     UPDATE comment_subject
     SET comment_count = comment_count + 1,
         visible_count = visible_count + CASE WHEN NEW.status='published' AND NEW.deleted_at IS NULL THEN 1 ELSE 0 END,
@@ -159,8 +156,13 @@ END
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER trg_cmt_set_path
-    AFTER INSERT ON comment
-    FOR EACH ROW EXECUTE FUNCTION fn_set_path_and_root();
+    BEFORE INSERT ON comment
+    FOR EACH ROW
+EXECUTE FUNCTION fn_set_path_and_root();
+
+COMMIT;
+
+
 
 -- 父楼层回复计数
 CREATE OR REPLACE FUNCTION fn_reply_count_adjust() RETURNS TRIGGER AS $$
