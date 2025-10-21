@@ -1,0 +1,87 @@
+paths:
+  /subjects/{subject_key}:
+    put:
+      operationId: SubjectUpsert
+      tags: [Subjects]
+      summary: Register or update a subject
+      description: Idempotent upsert keyed by `subject_key`; returns the latest subject state.
+      parameters:
+        - $ref: './components.yaml#/components/parameters/SubjectKey'
+        - $ref: './components.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        description: Optional attributes to persist for the subject.
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: './components.yaml#/components/schemas/SubjectUpsert'
+            examples:
+              default:
+                $ref: './components.yaml#/components/examples/SubjectUpsertExample'
+      responses:
+        '200':
+          $ref: './components.yaml#/components/responses/SubjectOk'
+        '201':
+          $ref: './components.yaml#/components/responses/SubjectCreated'
+        default:
+          $ref: './components.yaml#/components/responses/Problem'
+
+  /subjects/by-key/{subject_key}:
+    get:
+      operationId: SubjectFetchByKey
+      tags: [Subjects]
+      summary: Fetch subject by key
+      parameters:
+        - $ref: './components.yaml#/components/parameters/SubjectKey'
+      responses:
+        '200':
+          $ref: './components.yaml#/components/responses/SubjectOk'
+        default:
+          $ref: './components.yaml#/components/responses/Problem'
+
+  /subjects/{subject_id}:
+    get:
+      operationId: SubjectFetchById
+      tags: [Subjects]
+      summary: Fetch subject by id
+      parameters:
+        - $ref: './components.yaml#/components/parameters/SubjectId'
+      responses:
+        '200':
+          $ref: './components.yaml#/components/responses/SubjectOk'
+        default:
+          $ref: './components.yaml#/components/responses/Problem'
+    patch:
+      operationId: SubjectUpdatePolicy
+      tags: [Subjects]
+      summary: Update subject status or policy
+      parameters:
+        - $ref: './components.yaml#/components/parameters/SubjectId'
+        - $ref: './components.yaml#/components/parameters/IfMatch'
+      requestBody:
+        description: Fields to patch; omit properties to leave them unchanged.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './components.yaml#/components/schemas/SubjectPatch'
+      responses:
+        '200':
+          $ref: './components.yaml#/components/responses/SubjectOk'
+        '412':
+          $ref: './components.yaml#/components/responses/PreconditionFailed'
+        default:
+          $ref: './components.yaml#/components/responses/Problem'
+
+  /subjects/{subject_id}/metrics:
+    get:
+      operationId: SubjectMetricsFetch
+      tags: [Metrics]
+      summary: Fetch aggregate metrics for a subject
+      parameters:
+        - $ref: './components.yaml#/components/parameters/SubjectId'
+      responses:
+        '200':
+          $ref: './components.yaml#/components/responses/SubjectMetricsOk'
+        default:
+          $ref: './components.yaml#/components/responses/Problem'

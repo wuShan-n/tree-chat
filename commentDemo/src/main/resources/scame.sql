@@ -268,6 +268,21 @@ CREATE INDEX IF NOT EXISTS idx_cmt_rank_hot
     ON comment_rank_mv (subject_id, hot_score DESC, created_at DESC)
     WHERE status='published';
 
+
+ALTER TABLE comment
+    ADD CONSTRAINT c_parent_same_subject CHECK (
+        parent_id IS NULL OR
+        subject_id = (SELECT subject_id FROM comment WHERE id = parent_id)
+        );
+
+ALTER TABLE comment
+    ADD CONSTRAINT c_parent_not_self CHECK (parent_id IS NULL OR parent_id <> id);
+
+ALTER TABLE comment
+    ADD CONSTRAINT c_root_fk
+        FOREIGN KEY (root_id) REFERENCES comment(id)
+            DEFERRABLE INITIALLY DEFERRED;
+
 -- ================== 常用查询（示例，部署时可删） ==================
 -- 1) 某 subject 的顶层评论（最佳）：
 --   SELECT c.* FROM comment c

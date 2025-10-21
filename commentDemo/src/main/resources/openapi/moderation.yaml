@@ -1,0 +1,57 @@
+paths:
+  /comments/{comment_id}/reports:
+    post:
+      operationId: CommentReport
+      tags: [Moderation]
+      summary: Report a comment
+      parameters:
+        - $ref: './components.yaml#/components/parameters/CommentId'
+      requestBody:
+        description: Reason for reporting and optional metadata.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './components.yaml#/components/schemas/ReportCreate'
+            examples:
+              default:
+                $ref: './components.yaml#/components/examples/ReportCreateExample'
+      responses:
+        '201':
+          $ref: './components.yaml#/components/responses/ReportCreated'
+        default:
+          $ref: './components.yaml#/components/responses/Problem'
+
+  /moderation/comments:
+    get:
+      operationId: ModerationQueueList
+      tags: [Moderation]
+      summary: List comments requiring moderation
+      parameters:
+        - $ref: './components.yaml#/components/parameters/StatusFilterModeration'
+        - $ref: './components.yaml#/components/parameters/Limit'
+        - $ref: './components.yaml#/components/parameters/Cursor'
+      responses:
+        '200':
+          $ref: './components.yaml#/components/responses/ModerationQueueOk'
+        default:
+          $ref: './components.yaml#/components/responses/Problem'
+
+  /moderation/comments/{comment_id}/actions:
+    post:
+      operationId: ModerationApplyAction
+      tags: [Moderation]
+      summary: Apply a moderation action
+      parameters:
+        - $ref: './components.yaml#/components/parameters/CommentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './components.yaml#/components/schemas/ModerationActionRequest'
+      responses:
+        '200':
+          $ref: './components.yaml#/components/responses/ModerationActionOk'
+        default:
+          $ref: './components.yaml#/components/responses/Problem'

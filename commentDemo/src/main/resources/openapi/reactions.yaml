@@ -1,0 +1,74 @@
+paths:
+  /comments/{comment_id}/reactions/up:
+    put:
+      operationId: ReactionUpsertUpvote
+      tags: [Reactions]
+      summary: Toggle upvote
+      parameters:
+        - $ref: './components.yaml#/components/parameters/CommentId'
+      requestBody:
+        description: Set `active` to true to upvote, false to clear the vote.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './components.yaml#/components/schemas/ReactionToggle'
+      responses:
+        '200':
+          $ref: './components.yaml#/components/responses/ReactionStateOk'
+        default:
+          $ref: './components.yaml#/components/responses/Problem'
+
+  /comments/{comment_id}/reactions/down:
+    put:
+      operationId: ReactionUpsertDownvote
+      tags: [Reactions]
+      summary: Toggle downvote
+      parameters:
+        - $ref: './components.yaml#/components/parameters/CommentId'
+      requestBody:
+        description: Set `active` to true to downvote, false to clear the vote.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './components.yaml#/components/schemas/ReactionToggle'
+      responses:
+        '200':
+          $ref: './components.yaml#/components/responses/ReactionStateOk'
+        default:
+          $ref: './components.yaml#/components/responses/Problem'
+
+  /comments/{comment_id}/reactions/emoji/{code}:
+    put:
+      operationId: ReactionUpsertEmoji
+      tags: [Reactions]
+      summary: Toggle an emoji reaction
+      parameters:
+        - $ref: './components.yaml#/components/parameters/CommentId'
+        - $ref: './components.yaml#/components/parameters/ReactionEmojiCode'
+      requestBody:
+        description: Set `active` to true to apply the emoji, false to remove it.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './components.yaml#/components/schemas/ReactionToggle'
+      responses:
+        '200':
+          $ref: './components.yaml#/components/responses/ReactionStateOk'
+        default:
+          $ref: './components.yaml#/components/responses/Problem'
+
+  /comments/{comment_id}/reactions/summary:
+    get:
+      operationId: ReactionSummary
+      tags: [Reactions]
+      summary: Fetch reaction summary and the current user's reaction
+      parameters:
+        - $ref: './components.yaml#/components/parameters/CommentId'
+      responses:
+        '200':
+          $ref: './components.yaml#/components/responses/ReactionStateOk'
+        default:
+          $ref: './components.yaml#/components/responses/Problem'

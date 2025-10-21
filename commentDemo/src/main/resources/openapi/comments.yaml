@@ -1,0 +1,108 @@
+paths:
+  /subjects/{subject_id}/comments:
+    get:
+      operationId: CommentListForSubject
+      tags: [Comments]
+      summary: List top-level comments for a subject
+      description: Supports cursor pagination and multiple ranking views.
+      security: []
+      parameters:
+        - $ref: './components.yaml#/components/parameters/SubjectId'
+        - $ref: './components.yaml#/components/parameters/View'
+        - $ref: './components.yaml#/components/parameters/Limit'
+        - $ref: './components.yaml#/components/parameters/Cursor'
+        - $ref: './components.yaml#/components/parameters/StatusFilter'
+        - $ref: './components.yaml#/components/parameters/WithCounts'
+        - $ref: './components.yaml#/components/parameters/WithMyReaction'
+      responses:
+        '200':
+          $ref: './components.yaml#/components/responses/CommentsPageOk'
+        default:
+          $ref: './components.yaml#/components/responses/Problem'
+    post:
+      operationId: CommentCreateForSubject
+      tags: [Comments]
+      summary: Create a new comment under a subject
+      parameters:
+        - $ref: './components.yaml#/components/parameters/SubjectId'
+        - $ref: './components.yaml#/components/parameters/IdempotencyKey'
+      requestBody:
+        description: Markdown body for the comment and optional parent pointer.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './components.yaml#/components/schemas/CommentCreate'
+            examples:
+              default:
+                $ref: './components.yaml#/components/examples/CommentCreateExample'
+      responses:
+        '201':
+          $ref: './components.yaml#/components/responses/CommentCreated'
+        default:
+          $ref: './components.yaml#/components/responses/Problem'
+
+  /comments/{comment_id}:
+    get:
+      operationId: CommentFetch
+      tags: [Comments]
+      summary: Fetch comment details
+      security: []
+      parameters:
+        - $ref: './components.yaml#/components/parameters/CommentId'
+      responses:
+        '200':
+          $ref: './components.yaml#/components/responses/CommentOk'
+        default:
+          $ref: './components.yaml#/components/responses/Problem'
+    patch:
+      operationId: CommentUpdate
+      tags: [Comments]
+      summary: Edit a comment (optimistic locking)
+      parameters:
+        - $ref: './components.yaml#/components/parameters/CommentId'
+        - $ref: './components.yaml#/components/parameters/IfMatch'
+      requestBody:
+        description: Updated markdown or status.
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: './components.yaml#/components/schemas/CommentPatch'
+      responses:
+        '200':
+          $ref: './components.yaml#/components/responses/CommentOk'
+        '412':
+          $ref: './components.yaml#/components/responses/PreconditionFailed'
+        default:
+          $ref: './components.yaml#/components/responses/Problem'
+    delete:
+      operationId: CommentDelete
+      tags: [Comments]
+      summary: Delete a comment (soft delete by default)
+      parameters:
+        - $ref: './components.yaml#/components/parameters/CommentId'
+        - $ref: './components.yaml#/components/parameters/Soft'
+      responses:
+        '204':
+          $ref: './components.yaml#/components/responses/NoContent'
+        default:
+          $ref: './components.yaml#/components/responses/Problem'
+
+  /comments/{comment_id}/replies:
+    get:
+      operationId: CommentListReplies
+      tags: [Comments]
+      summary: Fetch a comment's reply tree
+      security: []
+      parameters:
+        - $ref: './components.yaml#/components/parameters/CommentId'
+        - $ref: './components.yaml#/components/parameters/Order'
+        - $ref: './components.yaml#/components/parameters/Limit'
+        - $ref: './components.yaml#/components/parameters/Cursor'
+        - $ref: './components.yaml#/components/parameters/CollapseBelow'
+      responses:
+        '200':
+          $ref: './components.yaml#/components/responses/CommentsPageOk'
+        default:
+          $ref: './components.yaml#/components/responses/Problem'

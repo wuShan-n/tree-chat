@@ -1,0 +1,722 @@
+﻿components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Supply a JWT issued by the identity provider.
+  parameters:
+    SubjectKey:
+      name: subject_key
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Stable identifier agreed between the host application and the comment module.
+    SubjectId:
+      name: subject_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CommentId:
+      name: comment_id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+    ReactionEmojiCode:
+      name: code
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Emoji code such as `thumbs_up` or `heart_eyes`.
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+        nullable: true
+    View:
+      name: view
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [best, hot, new, old, controversial]
+        default: best
+    Order:
+      name: order
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [structure, chronological]
+        default: structure
+    StatusFilter:
+      name: status
+      in: query
+      required: false
+      description: Filter visible comments by moderation status.
+      schema:
+        type: string
+        enum: [published, all, pending, hidden, deleted, spam]
+        default: published
+    StatusFilterModeration:
+      name: status
+      in: query
+      required: false
+      description: Filter the moderation queue.
+      schema:
+        type: string
+        enum: [pending, hidden, spam, deleted, all]
+        default: pending
+    WithCounts:
+      name: with_counts
+      in: query
+      required: false
+      schema:
+        type: boolean
+        default: true
+    WithMyReaction:
+      name: with_my_reaction
+      in: query
+      required: false
+      schema:
+        type: boolean
+        default: true
+    CollapseBelow:
+      name: collapse_below
+      in: query
+      required: false
+      schema:
+        type: number
+        minimum: 0
+        maximum: 1
+        default: 0
+    Soft:
+      name: soft
+      in: query
+      required: false
+      schema:
+        type: boolean
+        default: true
+      description: When true perform a soft delete; false issues a permanent delete.
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      schema:
+        type: string
+        format: uuid
+      description: Optional idempotency token to de-duplicate retries for unsafe methods.
+    IfMatch:
+      name: If-Match
+      in: header
+      required: false
+      schema:
+        type: string
+      description: ETag from the previous read used for optimistic locking.
+    Since:
+      name: since
+      in: query
+      required: false
+      schema:
+        type: string
+        format: date-time
+      description: Stream events created after the given timestamp.
+    EventTypes:
+      name: types
+      in: query
+      required: false
+      schema:
+        type: string
+      description: Comma-separated list of event types to include in the stream.
+  headers:
+    ETag:
+      description: Strong validator for concurrency control.
+      schema:
+        type: string
+    Location:
+      description: Canonical URI for the created resource.
+      schema:
+        type: string
+        format: uri
+  responses:
+    SubjectOk:
+      description: Subject found.
+      headers:
+        ETag:
+          $ref: '#/components/headers/ETag'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Subject'
+          examples:
+            default:
+              $ref: '#/components/examples/SubjectViewExample'
+    SubjectCreated:
+      description: Subject created.
+      headers:
+        ETag:
+          $ref: '#/components/headers/ETag'
+        Location:
+          $ref: '#/components/headers/Location'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Subject'
+          examples:
+            default:
+              $ref: '#/components/examples/SubjectViewExample'
+    CommentOk:
+      description: Comment retrieved.
+      headers:
+        ETag:
+          $ref: '#/components/headers/ETag'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Comment'
+          examples:
+            default:
+              $ref: '#/components/examples/CommentViewExample'
+    CommentCreated:
+      description: Comment created.
+      headers:
+        ETag:
+          $ref: '#/components/headers/ETag'
+        Location:
+          $ref: '#/components/headers/Location'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Comment'
+          examples:
+            default:
+              $ref: '#/components/examples/CommentViewExample'
+    CommentsPageOk:
+      description: Comment page returned.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/CommentsPage'
+          examples:
+            default:
+              $ref: '#/components/examples/CommentPageExample'
+    ReactionStateOk:
+      description: Reaction state returned.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ReactionState'
+          examples:
+            default:
+              $ref: '#/components/examples/ReactionStateExample'
+    ReportCreated:
+      description: Report accepted.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ReportReceipt'
+    ModerationQueueOk:
+      description: Moderation queue page returned.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ModerationQueue'
+    ModerationActionOk:
+      description: Moderation action recorded.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ModerationAction'
+    SubjectMetricsOk:
+      description: Subject metrics returned.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/SubjectMetrics'
+    EventStreamOk:
+      description: Server-sent event stream.
+      content:
+        text/event-stream:
+          schema:
+            type: string
+          examples:
+            default:
+              $ref: '#/components/examples/SseEventExample'
+    NoContent:
+      description: Operation completed without a response body.
+    PreconditionFailed:
+      description: Precondition failed because the supplied ETag is stale.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Problem:
+      description: Error response (RFC 7807).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  examples:
+    SubjectUpsertExample:
+      value:
+        is_locked: false
+        policy:
+          max_depth: 5
+          pre_moderation: true
+    SubjectViewExample:
+      value:
+        subject_id: "018f6c2b-2ff2-7b87-9d3f-9a2921bc7601"
+        subject_key: "article:42"
+        is_locked: false
+        is_archived: false
+        policy:
+          max_depth: 6
+          pre_moderation: false
+        comment_count: 128
+        visible_count: 120
+        last_commented_at: "2025-10-20T08:42:11Z"
+        created_at: "2025-10-18T09:32:44Z"
+    CommentCreateExample:
+      value:
+        parent_id: null
+        body_md: "First!"
+        status: "published"
+    CommentViewExample:
+      value:
+        id: 987
+        subject_id: "018f6c2b-2ff2-7b87-9d3f-9a2921bc7601"
+        root_id: 987
+        parent_id: null
+        depth: 0
+        author:
+          id: 42
+          urn: "user:42"
+        body_md: "Great article!"
+        body_html: "<p>Great article!</p>"
+        status: "published"
+        toxicity_score: 0.02
+        counters:
+          up: 12
+          down: 0
+          replies: 3
+        my_reaction:
+          up: true
+          down: false
+          emoji: ["thumbs_up"]
+        quality:
+          best_score: 0.87
+          hot_score: 0.64
+        collapsed: null
+        created_at: "2025-10-19T10:12:34Z"
+        edited_at: null
+        deleted_at: null
+    CommentPageExample:
+      value:
+        items:
+          - id: 987
+            subject_id: "018f6c2b-2ff2-7b87-9d3f-9a2921bc7601"
+            root_id: 987
+            parent_id: null
+            depth: 0
+            author:
+              id: 42
+              urn: "user:42"
+            body_md: "Great article!"
+            body_html: "<p>Great article!</p>"
+            status: "published"
+            toxicity_score: 0.02
+            counters:
+              up: 12
+              down: 0
+              replies: 3
+            my_reaction:
+              up: true
+              down: false
+              emoji: ["thumbs_up"]
+            quality:
+              best_score: 0.87
+              hot_score: 0.64
+            collapsed: null
+            created_at: "2025-10-19T10:12:34Z"
+            edited_at: null
+            deleted_at: null
+        next_cursor: "g2wAAA=="
+    ReactionStateExample:
+      value:
+        summary:
+          up: 12
+          down: 1
+          emoji:
+            - code: "thumbs_up"
+              count: 5
+            - code: "heart_eyes"
+              count: 2
+        my_reaction:
+          up: true
+          down: false
+          emoji: ["thumbs_up"]
+    ReportCreateExample:
+      value:
+        reason: "spam"
+        metadata:
+          screenshot: "https://cdn.example.com/report/123.png"
+    SseEventExample:
+      value: |
+        event: comment.created
+        id: 174002
+        data: {"subject_id":"018f6c2b-2ff2-7b87-9d3f-9a2921bc7601","comment":{"id":987,"body_html":"<p>Great article!</p>"}}
+  schemas:
+    SubjectPolicy:
+      type: object
+      properties:
+        max_depth:
+          type: integer
+          minimum: 1
+          default: 6
+        pre_moderation:
+          type: boolean
+          default: false
+      additionalProperties: true
+    SubjectBase:
+      type: object
+      properties:
+        subject_id:
+          type: string
+          format: uuid
+        subject_key:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        last_commented_at:
+          type: string
+          format: date-time
+          nullable: true
+      required: [subject_id, subject_key, created_at]
+    Subject:
+      allOf:
+        - $ref: '#/components/schemas/SubjectBase'
+        - type: object
+          properties:
+            is_locked:
+              type: boolean
+              default: false
+            is_archived:
+              type: boolean
+              default: false
+            policy:
+              $ref: '#/components/schemas/SubjectPolicy'
+            comment_count:
+              type: integer
+            visible_count:
+              type: integer
+          required: [is_locked, is_archived, policy]
+    SubjectUpsert:
+      type: object
+      properties:
+        is_locked:
+          type: boolean
+        is_archived:
+          type: boolean
+        policy:
+          $ref: '#/components/schemas/SubjectPolicy'
+    SubjectPatch:
+      type: object
+      properties:
+        is_locked:
+          type: boolean
+        is_archived:
+          type: boolean
+        policy:
+          $ref: '#/components/schemas/SubjectPolicy'
+    CommentBase:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        subject_id:
+          type: string
+          format: uuid
+        root_id:
+          type: integer
+          format: int64
+          nullable: true
+        parent_id:
+          type: integer
+          format: int64
+          nullable: true
+        depth:
+          type: integer
+        author:
+          type: object
+          properties:
+            id:
+              type: integer
+              format: int64
+            urn:
+              type: string
+              nullable: true
+          required: [id]
+        body_md:
+          type: string
+        body_html:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [published, pending, hidden, deleted, spam]
+        toxicity_score:
+          type: number
+          minimum: 0
+          maximum: 1
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        edited_at:
+          type: string
+          format: date-time
+          nullable: true
+        deleted_at:
+          type: string
+          format: date-time
+          nullable: true
+      required: [id, subject_id, depth, author, body_md, status, created_at]
+    CommentEngagement:
+      type: object
+      properties:
+        counters:
+          $ref: '#/components/schemas/Counters'
+        my_reaction:
+          $ref: '#/components/schemas/MyReaction'
+        quality:
+          $ref: '#/components/schemas/Quality'
+        collapsed:
+          type: object
+          nullable: true
+          properties:
+            value:
+              type: boolean
+            reason:
+              type: string
+              nullable: true
+      required: [counters]
+    Comment:
+      allOf:
+        - $ref: '#/components/schemas/CommentBase'
+        - $ref: '#/components/schemas/CommentEngagement'
+    CommentCreate:
+      type: object
+      properties:
+        parent_id:
+          type: integer
+          format: int64
+          nullable: true
+        body_md:
+          type: string
+        status:
+          type: string
+          enum: [published, pending]
+      required: [body_md]
+    CommentPatch:
+      type: object
+      properties:
+        body_md:
+          type: string
+        status:
+          type: string
+          enum: [published, hidden, deleted, spam]
+    CommentsPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Comment'
+        next_cursor:
+          type: string
+          nullable: true
+      required: [items]
+    ModerationQueue:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Comment'
+        next_cursor:
+          type: string
+          nullable: true
+      required: [items]
+    Counters:
+      type: object
+      properties:
+        up:
+          type: integer
+        down:
+          type: integer
+        replies:
+          type: integer
+      required: [up, down, replies]
+    MyReaction:
+      type: object
+      properties:
+        up:
+          type: boolean
+          default: false
+        down:
+          type: boolean
+          default: false
+        emoji:
+          type: array
+          items:
+            type: string
+      additionalProperties: false
+    ReactionToggle:
+      type: object
+      properties:
+        active:
+          type: boolean
+      required: [active]
+    ReactionState:
+      type: object
+      properties:
+        summary:
+          type: object
+          properties:
+            up:
+              type: integer
+            down:
+              type: integer
+            emoji:
+              type: array
+              items:
+                type: object
+                properties:
+                  code:
+                    type: string
+                  count:
+                    type: integer
+                required: [code, count]
+        my_reaction:
+          $ref: '#/components/schemas/MyReaction'
+      required: [summary]
+    ReportCreate:
+      type: object
+      properties:
+        reason:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+      required: [reason]
+    ReportReceipt:
+      type: object
+      properties:
+        report_id:
+          type: integer
+          format: int64
+      required: [report_id]
+    ModerationActionRequest:
+      type: object
+      properties:
+        action:
+          type: string
+          enum: [approve, hide, delete, spam, restore, shadow_ban]
+        reason:
+          type: string
+      required: [action]
+    ModerationAction:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        comment_id:
+          type: integer
+          format: int64
+        operator_id:
+          type: integer
+          format: int64
+        action:
+          type: string
+          enum: [approve, hide, delete, spam, restore, shadow_ban]
+        reason:
+          type: string
+          nullable: true
+        prev_status:
+          type: string
+          enum: [published, pending, hidden, deleted, spam]
+          nullable: true
+        new_status:
+          type: string
+          enum: [published, pending, hidden, deleted, spam]
+        created_at:
+          type: string
+          format: date-time
+    SubjectMetrics:
+      type: object
+      properties:
+        comment_count:
+          type: integer
+        visible_count:
+          type: integer
+        top_contributors:
+          type: array
+          items:
+            type: object
+            properties:
+              actor_id:
+                type: integer
+                format: int64
+              count:
+                type: integer
+        p95_latency_ms:
+          type: integer
+      additionalProperties: false
+    Quality:
+      type: object
+      properties:
+        best_score:
+          type: number
+        hot_score:
+          type: number
+    Problem:
+      type: object
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        trace_id:
+          type: string
+        meta:
+          type: object
+          additionalProperties: true
+      required: [title, status]
+

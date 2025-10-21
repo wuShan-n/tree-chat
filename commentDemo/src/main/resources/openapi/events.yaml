@@ -1,0 +1,16 @@
+paths:
+  /subjects/{subject_id}/events:
+    get:
+      operationId: SubjectEventsStream
+      tags: [Events]
+      summary: Stream subject-level events
+      description: Emits `comment.created`, `comment.updated`, `comment.deleted`, and `reaction.changed` events via SSE.
+      parameters:
+        - $ref: './components.yaml#/components/parameters/SubjectId'
+        - $ref: './components.yaml#/components/parameters/Since'
+        - $ref: './components.yaml#/components/parameters/EventTypes'
+      responses:
+        '200':
+          $ref: './components.yaml#/components/responses/EventStreamOk'
+        default:
+          $ref: './components.yaml#/components/responses/Problem'
