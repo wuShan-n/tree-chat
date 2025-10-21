@@ -4,6 +4,8 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 
+import java.util.List;
+
 @Builder
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record ReactionSummaryResponse(
@@ -15,14 +17,22 @@ public record ReactionSummaryResponse(
     public record Summary(
             @JsonProperty("up") int up,
             @JsonProperty("down") int down,
-            @JsonProperty("emoji") int emoji
+            @JsonProperty("emoji") List<EmojiSummary> emoji
+    ) {
+    }
+
+    @Builder
+    public record EmojiSummary(
+            @JsonProperty("code") String code,
+            @JsonProperty("count") int count
     ) {
     }
 
     @Builder
     public record MyReaction(
             @JsonProperty("up") boolean up,
-            @JsonProperty("down") boolean down
+            @JsonProperty("down") boolean down,
+            @JsonProperty("emoji") List<String> emoji
     ) {
     }
 }

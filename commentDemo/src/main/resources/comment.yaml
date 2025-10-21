@@ -44,14 +44,10 @@ paths:
     $ref: './openapi/comments.yaml#/paths/~1comments~1{comment_id}'
   /comments/{comment_id}/replies:
     $ref: './openapi/comments.yaml#/paths/~1comments~1{comment_id}~1replies'
-  /comments/{comment_id}/reactions/up:
-    $ref: './openapi/reactions.yaml#/paths/~1comments~1{comment_id}~1reactions~1up'
-  /comments/{comment_id}/reactions/down:
-    $ref: './openapi/reactions.yaml#/paths/~1comments~1{comment_id}~1reactions~1down'
-  /comments/{comment_id}/reactions/emoji/{code}:
-    $ref: './openapi/reactions.yaml#/paths/~1comments~1{comment_id}~1reactions~1emoji~1{code}'
-  /comments/{comment_id}/reactions/summary:
-    $ref: './openapi/reactions.yaml#/paths/~1comments~1{comment_id}~1reactions~1summary'
+  /comments/{comment_id}/reactions:
+    $ref: './openapi/reactions.yaml#/paths/~1comments~1{comment_id}~1reactions'
+  /comments/{comment_id}/reactions/{type}:
+    $ref: './openapi/reactions.yaml#/paths/~1comments~1{comment_id}~1reactions~1{type}'
   /comments/{comment_id}/reports:
     $ref: './openapi/moderation.yaml#/paths/~1comments~1{comment_id}~1reports'
   /moderation/comments:

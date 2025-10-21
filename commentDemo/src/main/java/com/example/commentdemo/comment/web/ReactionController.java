@@ -8,6 +8,7 @@ import com.example.commentdemo.comment.service.ReactionService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -23,6 +24,13 @@ public class ReactionController {
 
     private final ReactionService reactionService;
     private final ActorContextResolver actorContextResolver;
+
+    @GetMapping("/comments/{commentId}/reactions")
+    public Mono<ReactionSummaryResponse> getReactions(@PathVariable("commentId") Long commentId,
+                                                      ServerWebExchange exchange) {
+        return actorContextResolver.resolve(exchange)
+                .flatMap(actor -> reactionService.getReactions(commentId, actor));
+    }
 
     @PutMapping("/comments/{commentId}/reactions/{type}")
     public Mono<ReactionSummaryResponse> toggleReaction(@PathVariable("commentId") Long commentId,

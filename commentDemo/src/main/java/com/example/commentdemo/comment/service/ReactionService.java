@@ -9,4 +9,6 @@ import reactor.core.publisher.Mono;
 public interface ReactionService {
 
     Mono<ReactionSummaryResponse> toggleReaction(Long commentId, ReactionType type, ReactionToggleRequest request, ActorContext actor);
+
+    Mono<ReactionSummaryResponse> getReactions(Long commentId, ActorContext actor);
 }

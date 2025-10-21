@@ -27,13 +27,14 @@
       schema:
         type: integer
         format: int64
-    ReactionEmojiCode:
-      name: code
+    ReactionType:
+      name: type
       in: path
       required: true
       schema:
         type: string
-      description: Emoji code such as `thumbs_up` or `heart_eyes`.
+        enum: [up, down, emoji]
+      description: Reaction category to toggle. Use `emoji` to manage emoji reactions.
     Limit:
       name: limit
       in: query
@@ -610,6 +611,11 @@
       properties:
         active:
           type: boolean
+        emoji_code:
+          type:
+            - string
+            - 'null'
+          description: Required when `type` is `emoji`; identifies which emoji to toggle.
       required: [active]
     ReactionState:
       type: object
