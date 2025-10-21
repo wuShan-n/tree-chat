@@ -5,11 +5,14 @@ info:
   description: >-
     Comment module APIs covering subject registration, threaded conversations, reactions, and moderation.
     Mutating operations accept optional `Idempotency-Key` headers and honor ETag/If-Match for optimistic concurrency.
+  license:
+    name: Proprietary
+    url: https://mycorp.com/legal/terms
 jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
 servers:
-  - url: https://api.example.com/api/comments/v1
+  - url: https://comments.mycorp.com/api/comments/v1
     description: Production
-  - url: https://staging.example.com/api/comments/v1
+  - url: https://comments-staging.mycorp.com/api/comments/v1
     description: Staging
 tags:
   - name: Subjects
@@ -31,12 +34,12 @@ paths:
     $ref: './openapi/subjects.yaml#/paths/~1subjects~1{subject_key}'
   /subjects/by-key/{subject_key}:
     $ref: './openapi/subjects.yaml#/paths/~1subjects~1by-key~1{subject_key}'
-  /subjects/{subject_id}:
-    $ref: './openapi/subjects.yaml#/paths/~1subjects~1{subject_id}'
-  /subjects/{subject_id}/metrics:
-    $ref: './openapi/subjects.yaml#/paths/~1subjects~1{subject_id}~1metrics'
-  /subjects/{subject_id}/comments:
-    $ref: './openapi/comments.yaml#/paths/~1subjects~1{subject_id}~1comments'
+  /subjects/id/{subject_id}:
+    $ref: './openapi/subjects.yaml#/paths/~1subjects~1id~1{subject_id}'
+  /subjects/id/{subject_id}/metrics:
+    $ref: './openapi/subjects.yaml#/paths/~1subjects~1id~1{subject_id}~1metrics'
+  /subjects/id/{subject_id}/comments:
+    $ref: './openapi/comments.yaml#/paths/~1subjects~1id~1{subject_id}~1comments'
   /comments/{comment_id}:
     $ref: './openapi/comments.yaml#/paths/~1comments~1{comment_id}'
   /comments/{comment_id}/replies:
@@ -55,7 +58,7 @@ paths:
     $ref: './openapi/moderation.yaml#/paths/~1moderation~1comments'
   /moderation/comments/{comment_id}/actions:
     $ref: './openapi/moderation.yaml#/paths/~1moderation~1comments~1{comment_id}~1actions'
-  /subjects/{subject_id}/events:
-    $ref: './openapi/events.yaml#/paths/~1subjects~1{subject_id}~1events'
+  /subjects/id/{subject_id}/events:
+    $ref: './openapi/events.yaml#/paths/~1subjects~1id~1{subject_id}~1events'
 components:
   $ref: './openapi/components.yaml#/components'

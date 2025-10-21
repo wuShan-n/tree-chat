@@ -48,8 +48,9 @@
       in: query
       required: false
       schema:
-        type: string
-        nullable: true
+        type:
+          - string
+          - 'null'
     View:
       name: view
       in: query
@@ -406,9 +407,10 @@
           type: string
           format: date-time
         last_commented_at:
-          type: string
+          type:
+            - string
+            - 'null'
           format: date-time
-          nullable: true
       required: [subject_id, subject_key, created_at]
     Subject:
       allOf:
@@ -456,13 +458,15 @@
           type: string
           format: uuid
         root_id:
-          type: integer
+          type:
+            - integer
+            - 'null'
           format: int64
-          nullable: true
         parent_id:
-          type: integer
+          type:
+            - integer
+            - 'null'
           format: int64
-          nullable: true
         depth:
           type: integer
         author:
@@ -472,33 +476,38 @@
               type: integer
               format: int64
             urn:
-              type: string
-              nullable: true
+              type:
+                - string
+                - 'null'
           required: [id]
         body_md:
           type: string
         body_html:
-          type: string
-          nullable: true
+          type:
+            - string
+            - 'null'
         status:
           type: string
           enum: [published, pending, hidden, deleted, spam]
         toxicity_score:
-          type: number
+          type:
+            - number
+            - 'null'
           minimum: 0
           maximum: 1
-          nullable: true
         created_at:
           type: string
           format: date-time
         edited_at:
-          type: string
+          type:
+            - string
+            - 'null'
           format: date-time
-          nullable: true
         deleted_at:
-          type: string
+          type:
+            - string
+            - 'null'
           format: date-time
-          nullable: true
       required: [id, subject_id, depth, author, body_md, status, created_at]
     CommentEngagement:
       type: object
@@ -510,14 +519,17 @@
         quality:
           $ref: '#/components/schemas/Quality'
         collapsed:
-          type: object
-          nullable: true
-          properties:
-            value:
-              type: boolean
-            reason:
-              type: string
-              nullable: true
+          oneOf:
+            - type: 'null'
+            - type: object
+              properties:
+                value:
+                  type: boolean
+                reason:
+                  type:
+                    - string
+                    - 'null'
+              additionalProperties: false
       required: [counters]
     Comment:
       allOf:
@@ -527,9 +539,10 @@
       type: object
       properties:
         parent_id:
-          type: integer
+          type:
+            - integer
+            - 'null'
           format: int64
-          nullable: true
         body_md:
           type: string
         status:
@@ -552,8 +565,9 @@
           items:
             $ref: '#/components/schemas/Comment'
         next_cursor:
-          type: string
-          nullable: true
+          type:
+            - string
+            - 'null'
       required: [items]
     ModerationQueue:
       type: object
@@ -563,8 +577,9 @@
           items:
             $ref: '#/components/schemas/Comment'
         next_cursor:
-          type: string
-          nullable: true
+          type:
+            - string
+            - 'null'
       required: [items]
     Counters:
       type: object
@@ -660,12 +675,14 @@
           type: string
           enum: [approve, hide, delete, spam, restore, shadow_ban]
         reason:
-          type: string
-          nullable: true
+          type:
+            - string
+            - 'null'
         prev_status:
-          type: string
+          type:
+            - string
+            - 'null'
           enum: [published, pending, hidden, deleted, spam]
-          nullable: true
         new_status:
           type: string
           enum: [published, pending, hidden, deleted, spam]

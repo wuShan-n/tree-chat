@@ -16,6 +16,8 @@ paths:
       responses:
         '200':
           $ref: './components.yaml#/components/responses/ReactionStateOk'
+        '400':
+          $ref: './components.yaml#/components/responses/Problem'
         default:
           $ref: './components.yaml#/components/responses/Problem'
 
@@ -36,6 +38,8 @@ paths:
       responses:
         '200':
           $ref: './components.yaml#/components/responses/ReactionStateOk'
+        '400':
+          $ref: './components.yaml#/components/responses/Problem'
         default:
           $ref: './components.yaml#/components/responses/Problem'
 
@@ -57,6 +61,8 @@ paths:
       responses:
         '200':
           $ref: './components.yaml#/components/responses/ReactionStateOk'
+        '400':
+          $ref: './components.yaml#/components/responses/Problem'
         default:
           $ref: './components.yaml#/components/responses/Problem'
 
@@ -70,5 +76,7 @@ paths:
       responses:
         '200':
           $ref: './components.yaml#/components/responses/ReactionStateOk'
+        '400':
+          $ref: './components.yaml#/components/responses/Problem'
         default:
           $ref: './components.yaml#/components/responses/Problem'

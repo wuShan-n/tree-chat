@@ -1,5 +1,5 @@
 paths:
-  /subjects/{subject_id}/comments:
+  /subjects/id/{subject_id}/comments:
     get:
       operationId: CommentListForSubject
       tags: [Comments]
@@ -17,6 +17,8 @@ paths:
       responses:
         '200':
           $ref: './components.yaml#/components/responses/CommentsPageOk'
+        '400':
+          $ref: './components.yaml#/components/responses/Problem'
         default:
           $ref: './components.yaml#/components/responses/Problem'
     post:
@@ -39,6 +41,8 @@ paths:
       responses:
         '201':
           $ref: './components.yaml#/components/responses/CommentCreated'
+        '400':
+          $ref: './components.yaml#/components/responses/Problem'
         default:
           $ref: './components.yaml#/components/responses/Problem'
 
@@ -53,6 +57,8 @@ paths:
       responses:
         '200':
           $ref: './components.yaml#/components/responses/CommentOk'
+        '400':
+          $ref: './components.yaml#/components/responses/Problem'
         default:
           $ref: './components.yaml#/components/responses/Problem'
     patch:
@@ -74,6 +80,8 @@ paths:
           $ref: './components.yaml#/components/responses/CommentOk'
         '412':
           $ref: './components.yaml#/components/responses/PreconditionFailed'
+        '400':
+          $ref: './components.yaml#/components/responses/Problem'
         default:
           $ref: './components.yaml#/components/responses/Problem'
     delete:
@@ -86,6 +94,8 @@ paths:
       responses:
         '204':
           $ref: './components.yaml#/components/responses/NoContent'
+        '400':
+          $ref: './components.yaml#/components/responses/Problem'
         default:
           $ref: './components.yaml#/components/responses/Problem'
 
@@ -104,5 +114,7 @@ paths:
       responses:
         '200':
           $ref: './components.yaml#/components/responses/CommentsPageOk'
+        '400':
+          $ref: './components.yaml#/components/responses/Problem'
         default:
           $ref: './components.yaml#/components/responses/Problem'

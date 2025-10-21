@@ -23,6 +23,8 @@ paths:
           $ref: './components.yaml#/components/responses/SubjectOk'
         '201':
           $ref: './components.yaml#/components/responses/SubjectCreated'
+        '400':
+          $ref: './components.yaml#/components/responses/Problem'
         default:
           $ref: './components.yaml#/components/responses/Problem'
 
@@ -36,10 +38,12 @@ paths:
       responses:
         '200':
           $ref: './components.yaml#/components/responses/SubjectOk'
+        '400':
+          $ref: './components.yaml#/components/responses/Problem'
         default:
           $ref: './components.yaml#/components/responses/Problem'
 
-  /subjects/{subject_id}:
+  /subjects/id/{subject_id}:
     get:
       operationId: SubjectFetchById
       tags: [Subjects]
@@ -49,6 +53,8 @@ paths:
       responses:
         '200':
           $ref: './components.yaml#/components/responses/SubjectOk'
+        '400':
+          $ref: './components.yaml#/components/responses/Problem'
         default:
           $ref: './components.yaml#/components/responses/Problem'
     patch:
@@ -68,12 +74,14 @@ paths:
       responses:
         '200':
           $ref: './components.yaml#/components/responses/SubjectOk'
+        '400':
+          $ref: './components.yaml#/components/responses/Problem'
         '412':
           $ref: './components.yaml#/components/responses/PreconditionFailed'
         default:
           $ref: './components.yaml#/components/responses/Problem'
 
-  /subjects/{subject_id}/metrics:
+  /subjects/id/{subject_id}/metrics:
     get:
       operationId: SubjectMetricsFetch
       tags: [Metrics]
@@ -83,5 +91,7 @@ paths:
       responses:
         '200':
           $ref: './components.yaml#/components/responses/SubjectMetricsOk'
+        '400':
+          $ref: './components.yaml#/components/responses/Problem'
         default:
           $ref: './components.yaml#/components/responses/Problem'

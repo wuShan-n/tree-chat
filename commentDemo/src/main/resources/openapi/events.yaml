@@ -1,5 +1,5 @@
 paths:
-  /subjects/{subject_id}/events:
+  /subjects/id/{subject_id}/events:
     get:
       operationId: SubjectEventsStream
       tags: [Events]
@@ -12,5 +12,7 @@ paths:
       responses:
         '200':
           $ref: './components.yaml#/components/responses/EventStreamOk'
+        '400':
+          $ref: './components.yaml#/components/responses/Problem'
         default:
           $ref: './components.yaml#/components/responses/Problem'

@@ -19,6 +19,8 @@ paths:
       responses:
         '201':
           $ref: './components.yaml#/components/responses/ReportCreated'
+        '400':
+          $ref: './components.yaml#/components/responses/Problem'
         default:
           $ref: './components.yaml#/components/responses/Problem'
 
@@ -34,6 +36,8 @@ paths:
       responses:
         '200':
           $ref: './components.yaml#/components/responses/ModerationQueueOk'
+        '400':
+          $ref: './components.yaml#/components/responses/Problem'
         default:
           $ref: './components.yaml#/components/responses/Problem'
 
@@ -53,5 +57,7 @@ paths:
       responses:
         '200':
           $ref: './components.yaml#/components/responses/ModerationActionOk'
+        '400':
+          $ref: './components.yaml#/components/responses/Problem'
         default:
           $ref: './components.yaml#/components/responses/Problem'
