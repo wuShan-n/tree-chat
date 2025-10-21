@@ -11,13 +11,29 @@ import java.util.UUID;
 
 public interface CommentService {
 
-    Mono<CommentPageResponse> listTopLevel(UUID subjectId, String view, int limit, String cursor, ActorContext actor);
+    Mono<CommentPageResponse> listTopLevel(UUID subjectId,
+                                           String view,
+                                           int limit,
+                                           String cursor,
+                                           String status,
+                                           boolean withCounts,
+                                           boolean withMyReaction,
+                                           ActorContext actor);
 
-    Mono<CommentPageResponse> listReplies(Long commentId, String order, int limit, String cursor, ActorContext actor);
+    Mono<CommentPageResponse> listReplies(Long commentId,
+                                          String order,
+                                          int limit,
+                                          String cursor,
+                                          double collapseBelow,
+                                          boolean withCounts,
+                                          boolean withMyReaction,
+                                          ActorContext actor);
 
     Mono<CommentResponse> getComment(Long commentId, ActorContext actor);
 
     Mono<CommentResponse> create(UUID subjectId, CommentCreateRequest request, ActorContext actor, String idempotencyKey);
 
     Mono<CommentResponse> update(Long commentId, CommentUpdateRequest request, ActorContext actor, String ifMatch);
+
+    Mono<Void> delete(Long commentId, boolean soft, ActorContext actor);
 }

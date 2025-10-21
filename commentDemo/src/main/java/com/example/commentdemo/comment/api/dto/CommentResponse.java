@@ -1,14 +1,13 @@
 package com.example.commentdemo.comment.api.dto;
 
 import com.example.commentdemo.comment.model.CommentStatus;
-import com.example.commentdemo.comment.model.ReactionType;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
-import java.util.EnumSet;
+import java.util.Set;
 import java.util.Map;
 import java.util.UUID;
 
@@ -57,7 +56,7 @@ public record CommentResponse(
     public record MyReaction(
             @JsonProperty("up") boolean up,
             @JsonProperty("down") boolean down,
-            @JsonProperty("emoji") EnumSet<ReactionType> emoji
+            @JsonProperty("emoji") Set<String> emoji
     ) {
     }
 

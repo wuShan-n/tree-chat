@@ -1,5 +1,6 @@
 package com.example.commentdemo.comment.api.dto;
 
+import com.example.commentdemo.comment.model.CommentStatus;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -27,4 +28,7 @@ public class CommentCreateRequest {
 
     @JsonProperty("body_html")
     private String bodyHtml;
+
+    @JsonProperty("status")
+    private CommentStatus status;
 }

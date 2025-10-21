@@ -9,6 +9,9 @@ import com.example.commentdemo.comment.repository.CommentSubjectRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.time.OffsetDateTime;
+import java.util.UUID;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.r2dbc.core.DatabaseClient;
@@ -18,12 +21,11 @@ import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.time.OffsetDateTime;
-import java.util.UUID;
-
 @Service
 @RequiredArgsConstructor
 public class DefaultSubjectService implements SubjectService {
+
+    private static final int TOP_CONTRIBUTOR_LIMIT = 5;
 
     private final CommentSubjectRepository repository;
     private final SubjectMapper subjectMapper;
@@ -35,7 +37,7 @@ public class DefaultSubjectService implements SubjectService {
         Assert.hasText(subjectKey, "subjectKey must not be blank");
 
         return repository.findBySubjectKey(subjectKey)
-                .flatMap(existing -> applyUpsert(existing, request)
+                .flatMap(existing -> applyMutation(existing, toMutation(request))
                         .flatMap(repository::save)
                         .map(saved -> new UpsertResult(subjectMapper.toResponse(saved), false)))
                 .switchIfEmpty(Mono.defer(() -> createNew(subjectKey, request)
@@ -54,18 +56,16 @@ public class DefaultSubjectService implements SubjectService {
 
     @Override
     public Mono<SubjectResponse> findById(UUID subjectId) {
-        return repository.findById(subjectId)
-                .map(subjectMapper::toResponse)
-                .switchIfEmpty(Mono.error(() -> notFound("Subject not found for id %s".formatted(subjectId))));
+        return requireSubject(subjectId)
+                .map(subjectMapper::toResponse);
     }
 
     @Override
     public Mono<SubjectResponse> patch(UUID subjectId, SubjectPatchRequest request, String ifMatch) {
         Assert.notNull(subjectId, "subjectId must not be null");
 
-        return repository.findById(subjectId)
-                .switchIfEmpty(Mono.error(() -> notFound("Subject not found for id %s".formatted(subjectId))))
-                .flatMap(existing -> applyPatch(existing, request)
+        return requireSubject(subjectId)
+                .flatMap(existing -> applyMutation(existing, toMutation(request))
                         .flatMap(repository::save))
                 .map(subjectMapper::toResponse);
     }
@@ -74,8 +74,7 @@ public class DefaultSubjectService implements SubjectService {
     public Mono<SubjectMetricsResponse> fetchMetrics(UUID subjectId) {
         Assert.notNull(subjectId, "subjectId must not be null");
 
-        return repository.findById(subjectId)
-                .switchIfEmpty(Mono.error(() -> notFound("Subject not found for id %s".formatted(subjectId))))
+        return requireSubject(subjectId)
                 .flatMap(entity -> Mono.zip(
                         computeTopContributors(subjectId).collectList(),
                         computeP95Latency(subjectId))
@@ -88,16 +87,13 @@ public class DefaultSubjectService implements SubjectService {
     }
 
     private Mono<CommentSubjectEntity> createNew(String subjectKey, SubjectUpsertRequest request) {
-        var locked = request != null && Boolean.TRUE.equals(request.getLocked());
-        var archived = request != null && Boolean.TRUE.equals(request.getArchived());
-        var policy = request != null && request.getPolicy() != null
-                ? normalizePolicy(request.getPolicy())
-                : emptyPolicy();
+        var mutation = toMutation(request);
+        var policy = mutation.policy() != null ? mutation.policy().deepCopy() : emptyPolicy();
 
         var entity = CommentSubjectEntity.builder()
                 .subjectKey(subjectKey)
-                .locked(locked)
-                .archived(archived)
+                .locked(Boolean.TRUE.equals(mutation.locked()))
+                .archived(Boolean.TRUE.equals(mutation.archived()))
                 .policy(policy)
                 .commentCount(0)
                 .visibleCount(0)
@@ -106,43 +102,59 @@ public class DefaultSubjectService implements SubjectService {
         return Mono.just(entity);
     }
 
-    private Mono<CommentSubjectEntity> applyUpsert(CommentSubjectEntity entity, SubjectUpsertRequest request) {
-        if (request == null) {
+    private Mono<CommentSubjectEntity> applyMutation(CommentSubjectEntity entity, SubjectMutation mutation) {
+        if (mutation.isNoOp()) {
             return Mono.just(entity);
         }
-        if (request.getLocked() != null) {
-            entity.setLocked(request.getLocked());
-        }
-        if (request.getArchived() != null) {
-            entity.setArchived(request.getArchived());
-        }
-        if (request.getPolicy() != null) {
-            entity.setPolicy(normalizePolicy(request.getPolicy()));
-        }
-        return Mono.just(entity);
+
+        return Mono.fromSupplier(() -> {
+            if (mutation.locked() != null) {
+                entity.setLocked(mutation.locked());
+            }
+            if (mutation.archived() != null) {
+                entity.setArchived(mutation.archived());
+            }
+            if (mutation.policy() != null) {
+                entity.setPolicy(mutation.policy().deepCopy());
+            }
+            return entity;
+        });
     }
 
-    private Mono<CommentSubjectEntity> applyPatch(CommentSubjectEntity entity, SubjectPatchRequest request) {
+    private SubjectMutation toMutation(SubjectUpsertRequest request) {
         if (request == null) {
-            return Mono.just(entity);
+            return SubjectMutation.empty();
         }
-        if (request.getLocked() != null) {
-            entity.setLocked(request.getLocked());
-        }
-        if (request.getArchived() != null) {
-            entity.setArchived(request.getArchived());
-        }
-        if (request.getPolicy() != null) {
-            entity.setPolicy(normalizePolicy(request.getPolicy()));
-        }
-        return Mono.just(entity);
+        return new SubjectMutation(
+                request.getLocked(),
+                request.getArchived(),
+                request.getPolicy() != null ? normalizePolicy(request.getPolicy()) : null
+        );
     }
 
-    private JsonNode normalizePolicy(JsonNode policy) {
-        if (policy == null || policy.isNull()) {
+    private SubjectMutation toMutation(SubjectPatchRequest request) {
+        if (request == null) {
+            return SubjectMutation.empty();
+        }
+        return new SubjectMutation(
+                request.getLocked(),
+                request.getArchived(),
+                request.getPolicy() != null ? normalizePolicy(request.getPolicy()) : null
+        );
+    }
+
+    private ObjectNode normalizePolicy(JsonNode policy) {
+        if (policy == null || policy.isNull() || policy.isMissingNode()) {
             return emptyPolicy();
         }
-        return policy;
+        if (policy instanceof ObjectNode objectNode) {
+            return objectNode.deepCopy();
+        }
+        try {
+            return objectMapper.convertValue(policy, ObjectNode.class);
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Policy must be a JSON object", ex);
+        }
     }
 
     private ObjectNode emptyPolicy() {
@@ -162,8 +174,8 @@ public class DefaultSubjectService implements SubjectService {
                   AND deleted_at IS NULL
                 GROUP BY author_id
                 ORDER BY contribution_count DESC, actor_id ASC
-                LIMIT 5
-                """;
+                LIMIT %d
+                """.formatted(TOP_CONTRIBUTOR_LIMIT);
         return databaseClient.sql(sql)
                 .bind("subjectId", subjectId)
                 .map((row, metadata) -> {
@@ -202,7 +214,23 @@ public class DefaultSubjectService implements SubjectService {
                 .defaultIfEmpty(0);
     }
 
+    private Mono<CommentSubjectEntity> requireSubject(UUID subjectId) {
+        return repository.findById(subjectId)
+                .switchIfEmpty(Mono.error(() -> notFound("Subject not found for id %s".formatted(subjectId))));
+    }
+
     private ResponseStatusException notFound(String message) {
         return new ResponseStatusException(HttpStatus.NOT_FOUND, message);
+    }
+
+    private record SubjectMutation(Boolean locked, Boolean archived, ObjectNode policy) {
+
+        private static SubjectMutation empty() {
+            return new SubjectMutation(null, null, null);
+        }
+
+        private boolean isNoOp() {
+            return locked == null && archived == null && policy == null;
+        }
     }
 }
