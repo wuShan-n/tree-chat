@@ -13,6 +13,9 @@
     <version>0.0.1-SNAPSHOT</version>
     <name>commentDemo</name>
     <description>commentDemo</description>
+    <properties>
+        <java.version>25</java.version>
+    </properties>
 
     <dependencies>
         <dependency>

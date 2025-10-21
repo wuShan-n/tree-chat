@@ -10,7 +10,7 @@ The Spring Boot entry point sits in `src/main/java/com/example/commentdemo`. Com
 Use environment overrides such as `SPRING_R2DBC_URL` or `SPRING_R2DBC_USERNAME` when pointing at a different database. Static assets under `src/main/resources/static` are served automatically while the service runs.
 
 ## Coding Style & Naming Conventions
-Target Java 17 and Spring Boot 3.5. Keep four-space indentation and line lengths roughly under 120 characters. Respect package boundaries (e.g., new reaction endpoints belong in `comment/web`). Classes use PascalCase; DTOs end with `Request` or `Response`; repositories end with `Repository`. Prefer constructor injection (Lombok’s `@RequiredArgsConstructor` is acceptable). Use your IDE formatter or `mvn fmt:format` if configured.
+Target Java 25 and Spring Boot 3.5. Keep four-space indentation and line lengths roughly under 120 characters. Respect package boundaries (e.g., new reaction endpoints belong in `comment/web`). Classes use PascalCase; DTOs end with `Request` or `Response`; repositories end with `Repository`. Prefer constructor injection (Lombok’s `@RequiredArgsConstructor` is acceptable). Use your IDE formatter or `mvn fmt:format` if configured.
 
 ## Testing Guidelines
 JUnit 5 (`spring-boot-starter-test`) and `reactor-test` back the suite. Name test classes with the `*Tests` suffix and mirror packages. Prefer slice annotations like `@WebFluxTest` or `@DataR2dbcTest`; reserve `@SpringBootTest` for end-to-end scenarios. Use `StepVerifier` for reactive assertions. Run `mvn test` (or `mvn -Dtest=ClassName test`) before pushing.

@@ -222,26 +222,44 @@
             <button type="submit">发送 PUT /subjects/{subjectKey}</button>
         </form>
 
-        <form id="subject-get-form">
-            <h3>查询 Subject</h3>
+        <form id="subject-get-by-key-form">
+            <h3>按 subject_key 查询 Subject</h3>
             <label>
-                subject_id 或 subject_key
-                <input type="text" id="subject-identifier" placeholder="UUID 或 Key" required>
+                subject_key
+                <input type="text" id="subject-key-lookup" placeholder="如：demo-article-1" required>
             </label>
-            <button type="submit">发送 GET /subjects/{identifier}</button>
+            <button type="submit">发送 GET /subjects/by-key/{subject_key}</button>
+        </form>
+
+        <form id="subject-get-by-id-form">
+            <h3>按 subject_id 查询 Subject</h3>
+            <label>
+                subject_id（UUID）
+                <input type="text" id="subject-id-lookup" placeholder="UUID" required>
+            </label>
+            <button type="submit">发送 GET /subjects/id/{subject_id}</button>
         </form>
 
         <form id="subject-patch-form">
             <h3>部分更新 Subject</h3>
             <label>
                 subject_id（UUID）
-                <input type="text" id="subject-id" placeholder="UUID" required>
+                <input type="text" id="subject-id-patch" placeholder="UUID" required>
             </label>
             <label>
                 请求体（JSON，可选）
                 <textarea id="subject-patch-body" placeholder='{"is_locked":true}'></textarea>
             </label>
-            <button type="submit">发送 PATCH /subjects/{subjectId}</button>
+            <button type="submit">发送 PATCH /subjects/id/{subject_id}</button>
+        </form>
+
+        <form id="subject-metrics-form">
+            <h3>获取 Subject 指标</h3>
+            <label>
+                subject_id（UUID）
+                <input type="text" id="subject-id-metrics" placeholder="UUID" required>
+            </label>
+            <button type="submit">发送 GET /subjects/id/{subject_id}/metrics</button>
         </form>
     </section>
 
@@ -557,22 +575,35 @@
         });
     });
 
-    document.getElementById('subject-get-form').addEventListener('submit', async (event) => {
+    document.getElementById('subject-get-by-key-form').addEventListener('submit', async (event) => {
         event.preventDefault();
-        const identifier = document.getElementById('subject-identifier').value.trim();
-        if (!identifier) {
-            alert('identifier 不能为空');
+        const subjectKey = document.getElementById('subject-key-lookup').value.trim();
+        if (!subjectKey) {
+            alert('subject_key 不能为空');
             return;
         }
         await sendRequest({
             method: 'GET',
-            path: `/api/comments/v1/subjects/${encodeURIComponent(identifier)}`
+            path: `/api/comments/v1/subjects/by-key/${encodeURIComponent(subjectKey)}`
+        });
+    });
+
+    document.getElementById('subject-get-by-id-form').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const subjectId = document.getElementById('subject-id-lookup').value.trim();
+        if (!subjectId) {
+            alert('subject_id 不能为空');
+            return;
+        }
+        await sendRequest({
+            method: 'GET',
+            path: `/api/comments/v1/subjects/id/${encodeURIComponent(subjectId)}`
         });
     });
 
     document.getElementById('subject-patch-form').addEventListener('submit', async (event) => {
         event.preventDefault();
-        const subjectId = document.getElementById('subject-id').value.trim();
+        const subjectId = document.getElementById('subject-id-patch').value.trim();
         if (!subjectId) {
             alert('subject_id 不能为空');
             return;
@@ -586,8 +617,21 @@
         }
         await sendRequest({
             method: 'PATCH',
-            path: `/api/comments/v1/subjects/${encodeURIComponent(subjectId)}`,
+            path: `/api/comments/v1/subjects/id/${encodeURIComponent(subjectId)}`,
             body: payload
+        });
+    });
+
+    document.getElementById('subject-metrics-form').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const subjectId = document.getElementById('subject-id-metrics').value.trim();
+        if (!subjectId) {
+            alert('subject_id 不能为空');
+            return;
+        }
+        await sendRequest({
+            method: 'GET',
+            path: `/api/comments/v1/subjects/id/${encodeURIComponent(subjectId)}/metrics`
         });
     });
 
